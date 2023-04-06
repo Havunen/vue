@@ -104,7 +104,7 @@ function actuallyCompile(
     transpileOptions = {},
     transformAssetUrls,
     transformAssetUrlsOptions,
-    isProduction = process.env.NODE_ENV === 'production',
+    isProduction = (process.env.NODE_ENV === 'production') || (process.env.NODE_ENV === 'test'),
     isFunctional = false,
     optimizeSSR = false,
     prettify = true,
