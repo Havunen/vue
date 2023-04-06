@@ -14068,7 +14068,7 @@ function preprocess$1(options, preprocessor) {
     return res;
 }
 function actuallyCompile(options) {
-    const { source, compiler = _compiler, compilerOptions = {}, transpileOptions = {}, transformAssetUrls, transformAssetUrlsOptions, isProduction = process.env.NODE_ENV === 'production', isFunctional = false, optimizeSSR = false, prettify = true, isTS = false, bindings } = options;
+    const { source, compiler = _compiler, compilerOptions = {}, transpileOptions = {}, transformAssetUrls, transformAssetUrlsOptions, isProduction = (process.env.NODE_ENV === 'production') || (process.env.NODE_ENV === 'test'), isFunctional = false, optimizeSSR = false, prettify = true, isTS = false, bindings } = options;
     const compile = optimizeSSR && compiler.ssrCompile ? compiler.ssrCompile : compiler.compile;
     let finalCompilerOptions = compilerOptions;
     if (transformAssetUrls) {
