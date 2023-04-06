@@ -833,1029 +833,1632 @@ function sum (o) {
 
 var hashSum = sum;
 
-var iterator;
-var hasRequiredIterator;
-
-function requireIterator () {
-	if (hasRequiredIterator) return iterator;
-	hasRequiredIterator = 1;
-	iterator = function (Yallist) {
-	  Yallist.prototype[Symbol.iterator] = function* () {
-	    for (let walker = this.head; walker; walker = walker.next) {
-	      yield walker.value;
-	    }
-	  };
-	};
-	return iterator;
+/**
+ * @module LRUCache
+ */
+const perf = typeof performance === 'object' &&
+    performance &&
+    typeof performance.now === 'function'
+    ? performance
+    : Date;
+const warned$1 = new Set();
+const emitWarning = (msg, type, code, fn) => {
+    typeof process === 'object' &&
+        process &&
+        typeof process.emitWarning === 'function'
+        ? process.emitWarning(msg, type, code, fn)
+        : console.error(`[${code}] ${type}: ${msg}`);
+};
+const shouldWarn = (code) => !warned$1.has(code);
+const isPosInt = (n) => n && n === Math.floor(n) && n > 0 && isFinite(n);
+/* c8 ignore start */
+// This is a little bit ridiculous, tbh.
+// The maximum array length is 2^32-1 or thereabouts on most JS impls.
+// And well before that point, you're caching the entire world, I mean,
+// that's ~32GB of just integers for the next/prev links, plus whatever
+// else to hold that many keys and values.  Just filling the memory with
+// zeroes at init time is brutal when you get that big.
+// But why not be complete?
+// Maybe in the future, these limits will have expanded.
+const getUintArray = (max) => !isPosInt(max)
+    ? null
+    : max <= Math.pow(2, 8)
+        ? Uint8Array
+        : max <= Math.pow(2, 16)
+            ? Uint16Array
+            : max <= Math.pow(2, 32)
+                ? Uint32Array
+                : max <= Number.MAX_SAFE_INTEGER
+                    ? ZeroArray
+                    : null;
+/* c8 ignore stop */
+class ZeroArray extends Array {
+    constructor(size) {
+        super(size);
+        this.fill(0);
+    }
 }
-
-var yallist = Yallist$1;
-
-Yallist$1.Node = Node;
-Yallist$1.create = Yallist$1;
-
-function Yallist$1 (list) {
-  var self = this;
-  if (!(self instanceof Yallist$1)) {
-    self = new Yallist$1();
-  }
-
-  self.tail = null;
-  self.head = null;
-  self.length = 0;
-
-  if (list && typeof list.forEach === 'function') {
-    list.forEach(function (item) {
-      self.push(item);
-    });
-  } else if (arguments.length > 0) {
-    for (var i = 0, l = arguments.length; i < l; i++) {
-      self.push(arguments[i]);
+class Stack {
+    heap;
+    length;
+    // private constructor
+    static #constructing = false;
+    static create(max) {
+        const HeapCls = getUintArray(max);
+        if (!HeapCls)
+            return [];
+        Stack.#constructing = true;
+        const s = new Stack(max, HeapCls);
+        Stack.#constructing = false;
+        return s;
     }
-  }
-
-  return self
-}
-
-Yallist$1.prototype.removeNode = function (node) {
-  if (node.list !== this) {
-    throw new Error('removing node which does not belong to this list')
-  }
-
-  var next = node.next;
-  var prev = node.prev;
-
-  if (next) {
-    next.prev = prev;
-  }
-
-  if (prev) {
-    prev.next = next;
-  }
-
-  if (node === this.head) {
-    this.head = next;
-  }
-  if (node === this.tail) {
-    this.tail = prev;
-  }
-
-  node.list.length--;
-  node.next = null;
-  node.prev = null;
-  node.list = null;
-
-  return next
-};
-
-Yallist$1.prototype.unshiftNode = function (node) {
-  if (node === this.head) {
-    return
-  }
-
-  if (node.list) {
-    node.list.removeNode(node);
-  }
-
-  var head = this.head;
-  node.list = this;
-  node.next = head;
-  if (head) {
-    head.prev = node;
-  }
-
-  this.head = node;
-  if (!this.tail) {
-    this.tail = node;
-  }
-  this.length++;
-};
-
-Yallist$1.prototype.pushNode = function (node) {
-  if (node === this.tail) {
-    return
-  }
-
-  if (node.list) {
-    node.list.removeNode(node);
-  }
-
-  var tail = this.tail;
-  node.list = this;
-  node.prev = tail;
-  if (tail) {
-    tail.next = node;
-  }
-
-  this.tail = node;
-  if (!this.head) {
-    this.head = node;
-  }
-  this.length++;
-};
-
-Yallist$1.prototype.push = function () {
-  for (var i = 0, l = arguments.length; i < l; i++) {
-    push(this, arguments[i]);
-  }
-  return this.length
-};
-
-Yallist$1.prototype.unshift = function () {
-  for (var i = 0, l = arguments.length; i < l; i++) {
-    unshift(this, arguments[i]);
-  }
-  return this.length
-};
-
-Yallist$1.prototype.pop = function () {
-  if (!this.tail) {
-    return undefined
-  }
-
-  var res = this.tail.value;
-  this.tail = this.tail.prev;
-  if (this.tail) {
-    this.tail.next = null;
-  } else {
-    this.head = null;
-  }
-  this.length--;
-  return res
-};
-
-Yallist$1.prototype.shift = function () {
-  if (!this.head) {
-    return undefined
-  }
-
-  var res = this.head.value;
-  this.head = this.head.next;
-  if (this.head) {
-    this.head.prev = null;
-  } else {
-    this.tail = null;
-  }
-  this.length--;
-  return res
-};
-
-Yallist$1.prototype.forEach = function (fn, thisp) {
-  thisp = thisp || this;
-  for (var walker = this.head, i = 0; walker !== null; i++) {
-    fn.call(thisp, walker.value, i, this);
-    walker = walker.next;
-  }
-};
-
-Yallist$1.prototype.forEachReverse = function (fn, thisp) {
-  thisp = thisp || this;
-  for (var walker = this.tail, i = this.length - 1; walker !== null; i--) {
-    fn.call(thisp, walker.value, i, this);
-    walker = walker.prev;
-  }
-};
-
-Yallist$1.prototype.get = function (n) {
-  for (var i = 0, walker = this.head; walker !== null && i < n; i++) {
-    // abort out of the list early if we hit a cycle
-    walker = walker.next;
-  }
-  if (i === n && walker !== null) {
-    return walker.value
-  }
-};
-
-Yallist$1.prototype.getReverse = function (n) {
-  for (var i = 0, walker = this.tail; walker !== null && i < n; i++) {
-    // abort out of the list early if we hit a cycle
-    walker = walker.prev;
-  }
-  if (i === n && walker !== null) {
-    return walker.value
-  }
-};
-
-Yallist$1.prototype.map = function (fn, thisp) {
-  thisp = thisp || this;
-  var res = new Yallist$1();
-  for (var walker = this.head; walker !== null;) {
-    res.push(fn.call(thisp, walker.value, this));
-    walker = walker.next;
-  }
-  return res
-};
-
-Yallist$1.prototype.mapReverse = function (fn, thisp) {
-  thisp = thisp || this;
-  var res = new Yallist$1();
-  for (var walker = this.tail; walker !== null;) {
-    res.push(fn.call(thisp, walker.value, this));
-    walker = walker.prev;
-  }
-  return res
-};
-
-Yallist$1.prototype.reduce = function (fn, initial) {
-  var acc;
-  var walker = this.head;
-  if (arguments.length > 1) {
-    acc = initial;
-  } else if (this.head) {
-    walker = this.head.next;
-    acc = this.head.value;
-  } else {
-    throw new TypeError('Reduce of empty list with no initial value')
-  }
-
-  for (var i = 0; walker !== null; i++) {
-    acc = fn(acc, walker.value, i);
-    walker = walker.next;
-  }
-
-  return acc
-};
-
-Yallist$1.prototype.reduceReverse = function (fn, initial) {
-  var acc;
-  var walker = this.tail;
-  if (arguments.length > 1) {
-    acc = initial;
-  } else if (this.tail) {
-    walker = this.tail.prev;
-    acc = this.tail.value;
-  } else {
-    throw new TypeError('Reduce of empty list with no initial value')
-  }
-
-  for (var i = this.length - 1; walker !== null; i--) {
-    acc = fn(acc, walker.value, i);
-    walker = walker.prev;
-  }
-
-  return acc
-};
-
-Yallist$1.prototype.toArray = function () {
-  var arr = new Array(this.length);
-  for (var i = 0, walker = this.head; walker !== null; i++) {
-    arr[i] = walker.value;
-    walker = walker.next;
-  }
-  return arr
-};
-
-Yallist$1.prototype.toArrayReverse = function () {
-  var arr = new Array(this.length);
-  for (var i = 0, walker = this.tail; walker !== null; i++) {
-    arr[i] = walker.value;
-    walker = walker.prev;
-  }
-  return arr
-};
-
-Yallist$1.prototype.slice = function (from, to) {
-  to = to || this.length;
-  if (to < 0) {
-    to += this.length;
-  }
-  from = from || 0;
-  if (from < 0) {
-    from += this.length;
-  }
-  var ret = new Yallist$1();
-  if (to < from || to < 0) {
-    return ret
-  }
-  if (from < 0) {
-    from = 0;
-  }
-  if (to > this.length) {
-    to = this.length;
-  }
-  for (var i = 0, walker = this.head; walker !== null && i < from; i++) {
-    walker = walker.next;
-  }
-  for (; walker !== null && i < to; i++, walker = walker.next) {
-    ret.push(walker.value);
-  }
-  return ret
-};
-
-Yallist$1.prototype.sliceReverse = function (from, to) {
-  to = to || this.length;
-  if (to < 0) {
-    to += this.length;
-  }
-  from = from || 0;
-  if (from < 0) {
-    from += this.length;
-  }
-  var ret = new Yallist$1();
-  if (to < from || to < 0) {
-    return ret
-  }
-  if (from < 0) {
-    from = 0;
-  }
-  if (to > this.length) {
-    to = this.length;
-  }
-  for (var i = this.length, walker = this.tail; walker !== null && i > to; i--) {
-    walker = walker.prev;
-  }
-  for (; walker !== null && i > from; i--, walker = walker.prev) {
-    ret.push(walker.value);
-  }
-  return ret
-};
-
-Yallist$1.prototype.splice = function (start, deleteCount /*, ...nodes */) {
-  if (start > this.length) {
-    start = this.length - 1;
-  }
-  if (start < 0) {
-    start = this.length + start;
-  }
-
-  for (var i = 0, walker = this.head; walker !== null && i < start; i++) {
-    walker = walker.next;
-  }
-
-  var ret = [];
-  for (var i = 0; walker && i < deleteCount; i++) {
-    ret.push(walker.value);
-    walker = this.removeNode(walker);
-  }
-  if (walker === null) {
-    walker = this.tail;
-  }
-
-  if (walker !== this.head && walker !== this.tail) {
-    walker = walker.prev;
-  }
-
-  for (var i = 2; i < arguments.length; i++) {
-    walker = insert(this, walker, arguments[i]);
-  }
-  return ret;
-};
-
-Yallist$1.prototype.reverse = function () {
-  var head = this.head;
-  var tail = this.tail;
-  for (var walker = head; walker !== null; walker = walker.prev) {
-    var p = walker.prev;
-    walker.prev = walker.next;
-    walker.next = p;
-  }
-  this.head = tail;
-  this.tail = head;
-  return this
-};
-
-function insert (self, node, value) {
-  var inserted = node === self.head ?
-    new Node(value, null, node, self) :
-    new Node(value, node, node.next, self);
-
-  if (inserted.next === null) {
-    self.tail = inserted;
-  }
-  if (inserted.prev === null) {
-    self.head = inserted;
-  }
-
-  self.length++;
-
-  return inserted
-}
-
-function push (self, item) {
-  self.tail = new Node(item, self.tail, null, self);
-  if (!self.head) {
-    self.head = self.tail;
-  }
-  self.length++;
-}
-
-function unshift (self, item) {
-  self.head = new Node(item, null, self.head, self);
-  if (!self.tail) {
-    self.tail = self.head;
-  }
-  self.length++;
-}
-
-function Node (value, prev, next, list) {
-  if (!(this instanceof Node)) {
-    return new Node(value, prev, next, list)
-  }
-
-  this.list = list;
-  this.value = value;
-
-  if (prev) {
-    prev.next = this;
-    this.prev = prev;
-  } else {
-    this.prev = null;
-  }
-
-  if (next) {
-    next.prev = this;
-    this.next = next;
-  } else {
-    this.next = null;
-  }
-}
-
-try {
-  // add if support for Symbol.iterator is present
-  requireIterator()(Yallist$1);
-} catch (er) {}
-
-// A linked list to keep track of recently-used-ness
-const Yallist = yallist;
-
-const MAX = Symbol('max');
-const LENGTH = Symbol('length');
-const LENGTH_CALCULATOR = Symbol('lengthCalculator');
-const ALLOW_STALE = Symbol('allowStale');
-const MAX_AGE = Symbol('maxAge');
-const DISPOSE = Symbol('dispose');
-const NO_DISPOSE_ON_SET = Symbol('noDisposeOnSet');
-const LRU_LIST = Symbol('lruList');
-const CACHE = Symbol('cache');
-const UPDATE_AGE_ON_GET = Symbol('updateAgeOnGet');
-
-const naiveLength = () => 1;
-
-// lruList is a yallist where the head is the youngest
-// item, and the tail is the oldest.  the list contains the Hit
-// objects as the entries.
-// Each Hit object has a reference to its Yallist.Node.  This
-// never changes.
-//
-// cache is a Map (or PseudoMap) that matches the keys to
-// the Yallist.Node object.
-class LRUCache {
-  constructor (options) {
-    if (typeof options === 'number')
-      options = { max: options };
-
-    if (!options)
-      options = {};
-
-    if (options.max && (typeof options.max !== 'number' || options.max < 0))
-      throw new TypeError('max must be a non-negative number')
-    // Kind of weird to have a default max of Infinity, but oh well.
-    this[MAX] = options.max || Infinity;
-
-    const lc = options.length || naiveLength;
-    this[LENGTH_CALCULATOR] = (typeof lc !== 'function') ? naiveLength : lc;
-    this[ALLOW_STALE] = options.stale || false;
-    if (options.maxAge && typeof options.maxAge !== 'number')
-      throw new TypeError('maxAge must be a number')
-    this[MAX_AGE] = options.maxAge || 0;
-    this[DISPOSE] = options.dispose;
-    this[NO_DISPOSE_ON_SET] = options.noDisposeOnSet || false;
-    this[UPDATE_AGE_ON_GET] = options.updateAgeOnGet || false;
-    this.reset();
-  }
-
-  // resize the cache when the max changes.
-  set max (mL) {
-    if (typeof mL !== 'number' || mL < 0)
-      throw new TypeError('max must be a non-negative number')
-
-    this[MAX] = mL || Infinity;
-    trim(this);
-  }
-  get max () {
-    return this[MAX]
-  }
-
-  set allowStale (allowStale) {
-    this[ALLOW_STALE] = !!allowStale;
-  }
-  get allowStale () {
-    return this[ALLOW_STALE]
-  }
-
-  set maxAge (mA) {
-    if (typeof mA !== 'number')
-      throw new TypeError('maxAge must be a non-negative number')
-
-    this[MAX_AGE] = mA;
-    trim(this);
-  }
-  get maxAge () {
-    return this[MAX_AGE]
-  }
-
-  // resize the cache when the lengthCalculator changes.
-  set lengthCalculator (lC) {
-    if (typeof lC !== 'function')
-      lC = naiveLength;
-
-    if (lC !== this[LENGTH_CALCULATOR]) {
-      this[LENGTH_CALCULATOR] = lC;
-      this[LENGTH] = 0;
-      this[LRU_LIST].forEach(hit => {
-        hit.length = this[LENGTH_CALCULATOR](hit.value, hit.key);
-        this[LENGTH] += hit.length;
-      });
-    }
-    trim(this);
-  }
-  get lengthCalculator () { return this[LENGTH_CALCULATOR] }
-
-  get length () { return this[LENGTH] }
-  get itemCount () { return this[LRU_LIST].length }
-
-  rforEach (fn, thisp) {
-    thisp = thisp || this;
-    for (let walker = this[LRU_LIST].tail; walker !== null;) {
-      const prev = walker.prev;
-      forEachStep(this, fn, walker, thisp);
-      walker = prev;
-    }
-  }
-
-  forEach (fn, thisp) {
-    thisp = thisp || this;
-    for (let walker = this[LRU_LIST].head; walker !== null;) {
-      const next = walker.next;
-      forEachStep(this, fn, walker, thisp);
-      walker = next;
-    }
-  }
-
-  keys () {
-    return this[LRU_LIST].toArray().map(k => k.key)
-  }
-
-  values () {
-    return this[LRU_LIST].toArray().map(k => k.value)
-  }
-
-  reset () {
-    if (this[DISPOSE] &&
-        this[LRU_LIST] &&
-        this[LRU_LIST].length) {
-      this[LRU_LIST].forEach(hit => this[DISPOSE](hit.key, hit.value));
-    }
-
-    this[CACHE] = new Map(); // hash of items by key
-    this[LRU_LIST] = new Yallist(); // list of items in order of use recency
-    this[LENGTH] = 0; // length of items in the list
-  }
-
-  dump () {
-    return this[LRU_LIST].map(hit =>
-      isStale(this, hit) ? false : {
-        k: hit.key,
-        v: hit.value,
-        e: hit.now + (hit.maxAge || 0)
-      }).toArray().filter(h => h)
-  }
-
-  dumpLru () {
-    return this[LRU_LIST]
-  }
-
-  set (key, value, maxAge) {
-    maxAge = maxAge || this[MAX_AGE];
-
-    if (maxAge && typeof maxAge !== 'number')
-      throw new TypeError('maxAge must be a number')
-
-    const now = maxAge ? Date.now() : 0;
-    const len = this[LENGTH_CALCULATOR](value, key);
-
-    if (this[CACHE].has(key)) {
-      if (len > this[MAX]) {
-        del(this, this[CACHE].get(key));
-        return false
-      }
-
-      const node = this[CACHE].get(key);
-      const item = node.value;
-
-      // dispose of the old one before overwriting
-      // split out into 2 ifs for better coverage tracking
-      if (this[DISPOSE]) {
-        if (!this[NO_DISPOSE_ON_SET])
-          this[DISPOSE](key, item.value);
-      }
-
-      item.now = now;
-      item.maxAge = maxAge;
-      item.value = value;
-      this[LENGTH] += len - item.length;
-      item.length = len;
-      this.get(key);
-      trim(this);
-      return true
-    }
-
-    const hit = new Entry(key, value, len, now, maxAge);
-
-    // oversized objects fall out of cache automatically.
-    if (hit.length > this[MAX]) {
-      if (this[DISPOSE])
-        this[DISPOSE](key, value);
-
-      return false
-    }
-
-    this[LENGTH] += hit.length;
-    this[LRU_LIST].unshift(hit);
-    this[CACHE].set(key, this[LRU_LIST].head);
-    trim(this);
-    return true
-  }
-
-  has (key) {
-    if (!this[CACHE].has(key)) return false
-    const hit = this[CACHE].get(key).value;
-    return !isStale(this, hit)
-  }
-
-  get (key) {
-    return get(this, key, true)
-  }
-
-  peek (key) {
-    return get(this, key, false)
-  }
-
-  pop () {
-    const node = this[LRU_LIST].tail;
-    if (!node)
-      return null
-
-    del(this, node);
-    return node.value
-  }
-
-  del (key) {
-    del(this, this[CACHE].get(key));
-  }
-
-  load (arr) {
-    // reset the cache
-    this.reset();
-
-    const now = Date.now();
-    // A previous serialized cache has the most recent items first
-    for (let l = arr.length - 1; l >= 0; l--) {
-      const hit = arr[l];
-      const expiresAt = hit.e || 0;
-      if (expiresAt === 0)
-        // the item was created without expiration in a non aged cache
-        this.set(hit.k, hit.v);
-      else {
-        const maxAge = expiresAt - now;
-        // dont add already expired items
-        if (maxAge > 0) {
-          this.set(hit.k, hit.v, maxAge);
+    constructor(max, HeapCls) {
+        /* c8 ignore start */
+        if (!Stack.#constructing) {
+            throw new TypeError('instantiate Stack using Stack.create(n)');
         }
-      }
+        /* c8 ignore stop */
+        this.heap = new HeapCls(max);
+        this.length = 0;
     }
-  }
-
-  prune () {
-    this[CACHE].forEach((value, key) => get(this, key, false));
-  }
+    push(n) {
+        this.heap[this.length++] = n;
+    }
+    pop() {
+        return this.heap[--this.length];
+    }
 }
-
-const get = (self, key, doUse) => {
-  const node = self[CACHE].get(key);
-  if (node) {
-    const hit = node.value;
-    if (isStale(self, hit)) {
-      del(self, node);
-      if (!self[ALLOW_STALE])
-        return undefined
-    } else {
-      if (doUse) {
-        if (self[UPDATE_AGE_ON_GET])
-          node.value.now = Date.now();
-        self[LRU_LIST].unshiftNode(node);
-      }
+/**
+ * Default export, the thing you're using this module to get.
+ *
+ * All properties from the options object (with the exception of
+ * {@link OptionsBase.max} and {@link OptionsBase.maxSize}) are added as
+ * normal public members. (`max` and `maxBase` are read-only getters.)
+ * Changing any of these will alter the defaults for subsequent method calls,
+ * but is otherwise safe.
+ */
+class LRUCache {
+    // properties coming in from the options of these, only max and maxSize
+    // really *need* to be protected. The rest can be modified, as they just
+    // set defaults for various methods.
+    #max;
+    #maxSize;
+    #dispose;
+    #disposeAfter;
+    #fetchMethod;
+    /**
+     * {@link LRUCache.OptionsBase.ttl}
+     */
+    ttl;
+    /**
+     * {@link LRUCache.OptionsBase.ttlResolution}
+     */
+    ttlResolution;
+    /**
+     * {@link LRUCache.OptionsBase.ttlAutopurge}
+     */
+    ttlAutopurge;
+    /**
+     * {@link LRUCache.OptionsBase.updateAgeOnGet}
+     */
+    updateAgeOnGet;
+    /**
+     * {@link LRUCache.OptionsBase.updateAgeOnHas}
+     */
+    updateAgeOnHas;
+    /**
+     * {@link LRUCache.OptionsBase.allowStale}
+     */
+    allowStale;
+    /**
+     * {@link LRUCache.OptionsBase.noDisposeOnSet}
+     */
+    noDisposeOnSet;
+    /**
+     * {@link LRUCache.OptionsBase.noUpdateTTL}
+     */
+    noUpdateTTL;
+    /**
+     * {@link LRUCache.OptionsBase.maxEntrySize}
+     */
+    maxEntrySize;
+    /**
+     * {@link LRUCache.OptionsBase.sizeCalculation}
+     */
+    sizeCalculation;
+    /**
+     * {@link LRUCache.OptionsBase.noDeleteOnFetchRejection}
+     */
+    noDeleteOnFetchRejection;
+    /**
+     * {@link LRUCache.OptionsBase.noDeleteOnStaleGet}
+     */
+    noDeleteOnStaleGet;
+    /**
+     * {@link LRUCache.OptionsBase.allowStaleOnFetchAbort}
+     */
+    allowStaleOnFetchAbort;
+    /**
+     * {@link LRUCache.OptionsBase.allowStaleOnFetchRejection}
+     */
+    allowStaleOnFetchRejection;
+    /**
+     * {@link LRUCache.OptionsBase.ignoreFetchAbort}
+     */
+    ignoreFetchAbort;
+    // computed properties
+    #size;
+    #calculatedSize;
+    #keyMap;
+    #keyList;
+    #valList;
+    #next;
+    #prev;
+    #head;
+    #tail;
+    #free;
+    #disposed;
+    #sizes;
+    #starts;
+    #ttls;
+    #hasDispose;
+    #hasFetchMethod;
+    #hasDisposeAfter;
+    /**
+     * Do not call this method unless you need to inspect the
+     * inner workings of the cache.  If anything returned by this
+     * object is modified in any way, strange breakage may occur.
+     *
+     * These fields are private for a reason!
+     *
+     * @internal
+     */
+    static unsafeExposeInternals(c) {
+        return {
+            // properties
+            starts: c.#starts,
+            ttls: c.#ttls,
+            sizes: c.#sizes,
+            keyMap: c.#keyMap,
+            keyList: c.#keyList,
+            valList: c.#valList,
+            next: c.#next,
+            prev: c.#prev,
+            get head() {
+                return c.#head;
+            },
+            get tail() {
+                return c.#tail;
+            },
+            free: c.#free,
+            // methods
+            isBackgroundFetch: (p) => c.#isBackgroundFetch(p),
+            backgroundFetch: (k, index, options, context) => c.#backgroundFetch(k, index, options, context),
+            moveToTail: (index) => c.#moveToTail(index),
+            indexes: (options) => c.#indexes(options),
+            rindexes: (options) => c.#rindexes(options),
+            isStale: (index) => c.#isStale(index),
+        };
     }
-    return hit.value
-  }
-};
-
-const isStale = (self, hit) => {
-  if (!hit || (!hit.maxAge && !self[MAX_AGE]))
-    return false
-
-  const diff = Date.now() - hit.now;
-  return hit.maxAge ? diff > hit.maxAge
-    : self[MAX_AGE] && (diff > self[MAX_AGE])
-};
-
-const trim = self => {
-  if (self[LENGTH] > self[MAX]) {
-    for (let walker = self[LRU_LIST].tail;
-      self[LENGTH] > self[MAX] && walker !== null;) {
-      // We know that we're about to delete this one, and also
-      // what the next least recently used key will be, so just
-      // go ahead and set it now.
-      const prev = walker.prev;
-      del(self, walker);
-      walker = prev;
+    // Protected read-only members
+    /**
+     * {@link LRUCache.OptionsBase.max} (read-only)
+     */
+    get max() {
+        return this.#max;
     }
-  }
-};
-
-const del = (self, node) => {
-  if (node) {
-    const hit = node.value;
-    if (self[DISPOSE])
-      self[DISPOSE](hit.key, hit.value);
-
-    self[LENGTH] -= hit.length;
-    self[CACHE].delete(hit.key);
-    self[LRU_LIST].removeNode(node);
-  }
-};
-
-class Entry {
-  constructor (key, value, length, now, maxAge) {
-    this.key = key;
-    this.value = value;
-    this.length = length;
-    this.now = now;
-    this.maxAge = maxAge || 0;
-  }
+    /**
+     * {@link LRUCache.OptionsBase.maxSize} (read-only)
+     */
+    get maxSize() {
+        return this.#maxSize;
+    }
+    /**
+     * The total computed size of items in the cache (read-only)
+     */
+    get calculatedSize() {
+        return this.#calculatedSize;
+    }
+    /**
+     * The number of items stored in the cache (read-only)
+     */
+    get size() {
+        return this.#size;
+    }
+    /**
+     * {@link LRUCache.OptionsBase.fetchMethod} (read-only)
+     */
+    get fetchMethod() {
+        return this.#fetchMethod;
+    }
+    /**
+     * {@link LRUCache.OptionsBase.dispose} (read-only)
+     */
+    get dispose() {
+        return this.#dispose;
+    }
+    /**
+     * {@link LRUCache.OptionsBase.disposeAfter} (read-only)
+     */
+    get disposeAfter() {
+        return this.#disposeAfter;
+    }
+    constructor(options) {
+        const { max = 0, ttl, ttlResolution = 1, ttlAutopurge, updateAgeOnGet, updateAgeOnHas, allowStale, dispose, disposeAfter, noDisposeOnSet, noUpdateTTL, maxSize = 0, maxEntrySize = 0, sizeCalculation, fetchMethod, noDeleteOnFetchRejection, noDeleteOnStaleGet, allowStaleOnFetchRejection, allowStaleOnFetchAbort, ignoreFetchAbort, } = options;
+        if (max !== 0 && !isPosInt(max)) {
+            throw new TypeError('max option must be a nonnegative integer');
+        }
+        const UintArray = max ? getUintArray(max) : Array;
+        if (!UintArray) {
+            throw new Error('invalid max value: ' + max);
+        }
+        this.#max = max;
+        this.#maxSize = maxSize;
+        this.maxEntrySize = maxEntrySize || this.#maxSize;
+        this.sizeCalculation = sizeCalculation;
+        if (this.sizeCalculation) {
+            if (!this.#maxSize && !this.maxEntrySize) {
+                throw new TypeError('cannot set sizeCalculation without setting maxSize or maxEntrySize');
+            }
+            if (typeof this.sizeCalculation !== 'function') {
+                throw new TypeError('sizeCalculation set to non-function');
+            }
+        }
+        if (fetchMethod !== undefined &&
+            typeof fetchMethod !== 'function') {
+            throw new TypeError('fetchMethod must be a function if specified');
+        }
+        this.#fetchMethod = fetchMethod;
+        this.#hasFetchMethod = !!fetchMethod;
+        this.#keyMap = new Map();
+        this.#keyList = new Array(max).fill(undefined);
+        this.#valList = new Array(max).fill(undefined);
+        this.#next = new UintArray(max);
+        this.#prev = new UintArray(max);
+        this.#head = 0;
+        this.#tail = 0;
+        this.#free = Stack.create(max);
+        this.#size = 0;
+        this.#calculatedSize = 0;
+        if (typeof dispose === 'function') {
+            this.#dispose = dispose;
+        }
+        if (typeof disposeAfter === 'function') {
+            this.#disposeAfter = disposeAfter;
+            this.#disposed = [];
+        }
+        else {
+            this.#disposeAfter = undefined;
+            this.#disposed = undefined;
+        }
+        this.#hasDispose = !!this.#dispose;
+        this.#hasDisposeAfter = !!this.#disposeAfter;
+        this.noDisposeOnSet = !!noDisposeOnSet;
+        this.noUpdateTTL = !!noUpdateTTL;
+        this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection;
+        this.allowStaleOnFetchRejection = !!allowStaleOnFetchRejection;
+        this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort;
+        this.ignoreFetchAbort = !!ignoreFetchAbort;
+        // NB: maxEntrySize is set to maxSize if it's set
+        if (this.maxEntrySize !== 0) {
+            if (this.#maxSize !== 0) {
+                if (!isPosInt(this.#maxSize)) {
+                    throw new TypeError('maxSize must be a positive integer if specified');
+                }
+            }
+            if (!isPosInt(this.maxEntrySize)) {
+                throw new TypeError('maxEntrySize must be a positive integer if specified');
+            }
+            this.#initializeSizeTracking();
+        }
+        this.allowStale = !!allowStale;
+        this.noDeleteOnStaleGet = !!noDeleteOnStaleGet;
+        this.updateAgeOnGet = !!updateAgeOnGet;
+        this.updateAgeOnHas = !!updateAgeOnHas;
+        this.ttlResolution =
+            isPosInt(ttlResolution) || ttlResolution === 0
+                ? ttlResolution
+                : 1;
+        this.ttlAutopurge = !!ttlAutopurge;
+        this.ttl = ttl || 0;
+        if (this.ttl) {
+            if (!isPosInt(this.ttl)) {
+                throw new TypeError('ttl must be a positive integer if specified');
+            }
+            this.#initializeTTLTracking();
+        }
+        // do not allow completely unbounded caches
+        if (this.#max === 0 && this.ttl === 0 && this.#maxSize === 0) {
+            throw new TypeError('At least one of max, maxSize, or ttl is required');
+        }
+        if (!this.ttlAutopurge && !this.#max && !this.#maxSize) {
+            const code = 'LRU_CACHE_UNBOUNDED';
+            if (shouldWarn(code)) {
+                warned$1.add(code);
+                const msg = 'TTL caching without ttlAutopurge, max, or maxSize can ' +
+                    'result in unbounded memory consumption.';
+                emitWarning(msg, 'UnboundedCacheWarning', code, LRUCache);
+            }
+        }
+    }
+    /**
+     * Return the remaining TTL time for a given entry key
+     */
+    getRemainingTTL(key) {
+        return this.#keyMap.has(key) ? Infinity : 0;
+    }
+    #initializeTTLTracking() {
+        const ttls = new ZeroArray(this.#max);
+        const starts = new ZeroArray(this.#max);
+        this.#ttls = ttls;
+        this.#starts = starts;
+        this.#setItemTTL = (index, ttl, start = perf.now()) => {
+            starts[index] = ttl !== 0 ? start : 0;
+            ttls[index] = ttl;
+            if (ttl !== 0 && this.ttlAutopurge) {
+                const t = setTimeout(() => {
+                    if (this.#isStale(index)) {
+                        this.delete(this.#keyList[index]);
+                    }
+                }, ttl + 1);
+                // unref() not supported on all platforms
+                /* c8 ignore start */
+                if (t.unref) {
+                    t.unref();
+                }
+                /* c8 ignore stop */
+            }
+        };
+        this.#updateItemAge = index => {
+            starts[index] = ttls[index] !== 0 ? perf.now() : 0;
+        };
+        this.#statusTTL = (status, index) => {
+            if (ttls[index]) {
+                const ttl = ttls[index];
+                const start = starts[index];
+                status.ttl = ttl;
+                status.start = start;
+                status.now = cachedNow || getNow();
+                status.remainingTTL = status.now + ttl - start;
+            }
+        };
+        // debounce calls to perf.now() to 1s so we're not hitting
+        // that costly call repeatedly.
+        let cachedNow = 0;
+        const getNow = () => {
+            const n = perf.now();
+            if (this.ttlResolution > 0) {
+                cachedNow = n;
+                const t = setTimeout(() => (cachedNow = 0), this.ttlResolution);
+                // not available on all platforms
+                /* c8 ignore start */
+                if (t.unref) {
+                    t.unref();
+                }
+                /* c8 ignore stop */
+            }
+            return n;
+        };
+        this.getRemainingTTL = key => {
+            const index = this.#keyMap.get(key);
+            if (index === undefined) {
+                return 0;
+            }
+            return ttls[index] === 0 || starts[index] === 0
+                ? Infinity
+                : starts[index] + ttls[index] - (cachedNow || getNow());
+        };
+        this.#isStale = index => {
+            return (ttls[index] !== 0 &&
+                starts[index] !== 0 &&
+                (cachedNow || getNow()) - starts[index] > ttls[index]);
+        };
+    }
+    // conditionally set private methods related to TTL
+    #updateItemAge = () => { };
+    #statusTTL = () => { };
+    #setItemTTL = () => { };
+    /* c8 ignore stop */
+    #isStale = () => false;
+    #initializeSizeTracking() {
+        const sizes = new ZeroArray(this.#max);
+        this.#calculatedSize = 0;
+        this.#sizes = sizes;
+        this.#removeItemSize = index => {
+            this.#calculatedSize -= sizes[index];
+            sizes[index] = 0;
+        };
+        this.#requireSize = (k, v, size, sizeCalculation) => {
+            // provisionally accept background fetches.
+            // actual value size will be checked when they return.
+            if (this.#isBackgroundFetch(v)) {
+                return 0;
+            }
+            if (!isPosInt(size)) {
+                if (sizeCalculation) {
+                    if (typeof sizeCalculation !== 'function') {
+                        throw new TypeError('sizeCalculation must be a function');
+                    }
+                    size = sizeCalculation(v, k);
+                    if (!isPosInt(size)) {
+                        throw new TypeError('sizeCalculation return invalid (expect positive integer)');
+                    }
+                }
+                else {
+                    throw new TypeError('invalid size value (must be positive integer). ' +
+                        'When maxSize or maxEntrySize is used, sizeCalculation ' +
+                        'or size must be set.');
+                }
+            }
+            return size;
+        };
+        this.#addItemSize = (index, size, status) => {
+            sizes[index] = size;
+            if (this.#maxSize) {
+                const maxSize = this.#maxSize - sizes[index];
+                while (this.#calculatedSize > maxSize) {
+                    this.#evict(true);
+                }
+            }
+            this.#calculatedSize += sizes[index];
+            if (status) {
+                status.entrySize = size;
+                status.totalCalculatedSize = this.#calculatedSize;
+            }
+        };
+    }
+    #removeItemSize = _i => { };
+    #addItemSize = (_i, _s, _st) => { };
+    #requireSize = (_k, _v, size, sizeCalculation) => {
+        if (size || sizeCalculation) {
+            throw new TypeError('cannot set size without setting maxSize or maxEntrySize on cache');
+        }
+        return 0;
+    };
+    *#indexes({ allowStale = this.allowStale } = {}) {
+        if (this.#size) {
+            for (let i = this.#tail; true;) {
+                if (!this.#isValidIndex(i)) {
+                    break;
+                }
+                if (allowStale || !this.#isStale(i)) {
+                    yield i;
+                }
+                if (i === this.#head) {
+                    break;
+                }
+                else {
+                    i = this.#prev[i];
+                }
+            }
+        }
+    }
+    *#rindexes({ allowStale = this.allowStale } = {}) {
+        if (this.#size) {
+            for (let i = this.#head; true;) {
+                if (!this.#isValidIndex(i)) {
+                    break;
+                }
+                if (allowStale || !this.#isStale(i)) {
+                    yield i;
+                }
+                if (i === this.#tail) {
+                    break;
+                }
+                else {
+                    i = this.#next[i];
+                }
+            }
+        }
+    }
+    #isValidIndex(index) {
+        return (index !== undefined &&
+            this.#keyMap.get(this.#keyList[index]) === index);
+    }
+    /**
+     * Return a generator yielding `[key, value]` pairs,
+     * in order from most recently used to least recently used.
+     */
+    *entries() {
+        for (const i of this.#indexes()) {
+            if (this.#valList[i] !== undefined &&
+                this.#keyList[i] !== undefined &&
+                !this.#isBackgroundFetch(this.#valList[i])) {
+                yield [this.#keyList[i], this.#valList[i]];
+            }
+        }
+    }
+    /**
+     * Inverse order version of {@link LRUCache.entries}
+     *
+     * Return a generator yielding `[key, value]` pairs,
+     * in order from least recently used to most recently used.
+     */
+    *rentries() {
+        for (const i of this.#rindexes()) {
+            if (this.#valList[i] !== undefined &&
+                this.#keyList[i] !== undefined &&
+                !this.#isBackgroundFetch(this.#valList[i])) {
+                yield [this.#keyList[i], this.#valList[i]];
+            }
+        }
+    }
+    /**
+     * Return a generator yielding the keys in the cache,
+     * in order from most recently used to least recently used.
+     */
+    *keys() {
+        for (const i of this.#indexes()) {
+            const k = this.#keyList[i];
+            if (k !== undefined &&
+                !this.#isBackgroundFetch(this.#valList[i])) {
+                yield k;
+            }
+        }
+    }
+    /**
+     * Inverse order version of {@link LRUCache.keys}
+     *
+     * Return a generator yielding the keys in the cache,
+     * in order from least recently used to most recently used.
+     */
+    *rkeys() {
+        for (const i of this.#rindexes()) {
+            const k = this.#keyList[i];
+            if (k !== undefined &&
+                !this.#isBackgroundFetch(this.#valList[i])) {
+                yield k;
+            }
+        }
+    }
+    /**
+     * Return a generator yielding the values in the cache,
+     * in order from most recently used to least recently used.
+     */
+    *values() {
+        for (const i of this.#indexes()) {
+            const v = this.#valList[i];
+            if (v !== undefined &&
+                !this.#isBackgroundFetch(this.#valList[i])) {
+                yield this.#valList[i];
+            }
+        }
+    }
+    /**
+     * Inverse order version of {@link LRUCache.values}
+     *
+     * Return a generator yielding the values in the cache,
+     * in order from least recently used to most recently used.
+     */
+    *rvalues() {
+        for (const i of this.#rindexes()) {
+            const v = this.#valList[i];
+            if (v !== undefined &&
+                !this.#isBackgroundFetch(this.#valList[i])) {
+                yield this.#valList[i];
+            }
+        }
+    }
+    /**
+     * Iterating over the cache itself yields the same results as
+     * {@link LRUCache.entries}
+     */
+    [Symbol.iterator]() {
+        return this.entries();
+    }
+    /**
+     * Find a value for which the supplied fn method returns a truthy value,
+     * similar to Array.find().  fn is called as fn(value, key, cache).
+     */
+    find(fn, getOptions = {}) {
+        for (const i of this.#indexes()) {
+            const v = this.#valList[i];
+            const value = this.#isBackgroundFetch(v)
+                ? v.__staleWhileFetching
+                : v;
+            if (value === undefined)
+                continue;
+            if (fn(value, this.#keyList[i], this)) {
+                return this.get(this.#keyList[i], getOptions);
+            }
+        }
+    }
+    /**
+     * Call the supplied function on each item in the cache, in order from
+     * most recently used to least recently used.  fn is called as
+     * fn(value, key, cache).  Does not update age or recenty of use.
+     * Does not iterate over stale values.
+     */
+    forEach(fn, thisp = this) {
+        for (const i of this.#indexes()) {
+            const v = this.#valList[i];
+            const value = this.#isBackgroundFetch(v)
+                ? v.__staleWhileFetching
+                : v;
+            if (value === undefined)
+                continue;
+            fn.call(thisp, value, this.#keyList[i], this);
+        }
+    }
+    /**
+     * The same as {@link LRUCache.forEach} but items are iterated over in
+     * reverse order.  (ie, less recently used items are iterated over first.)
+     */
+    rforEach(fn, thisp = this) {
+        for (const i of this.#rindexes()) {
+            const v = this.#valList[i];
+            const value = this.#isBackgroundFetch(v)
+                ? v.__staleWhileFetching
+                : v;
+            if (value === undefined)
+                continue;
+            fn.call(thisp, value, this.#keyList[i], this);
+        }
+    }
+    /**
+     * Delete any stale entries. Returns true if anything was removed,
+     * false otherwise.
+     */
+    purgeStale() {
+        let deleted = false;
+        for (const i of this.#rindexes({ allowStale: true })) {
+            if (this.#isStale(i)) {
+                this.delete(this.#keyList[i]);
+                deleted = true;
+            }
+        }
+        return deleted;
+    }
+    /**
+     * Return an array of [key, {@link LRUCache.Entry}] tuples which can be
+     * passed to cache.load()
+     */
+    dump() {
+        const arr = [];
+        for (const i of this.#indexes({ allowStale: true })) {
+            const key = this.#keyList[i];
+            const v = this.#valList[i];
+            const value = this.#isBackgroundFetch(v)
+                ? v.__staleWhileFetching
+                : v;
+            if (value === undefined || key === undefined)
+                continue;
+            const entry = { value };
+            if (this.#ttls && this.#starts) {
+                entry.ttl = this.#ttls[i];
+                // always dump the start relative to a portable timestamp
+                // it's ok for this to be a bit slow, it's a rare operation.
+                const age = perf.now() - this.#starts[i];
+                entry.start = Math.floor(Date.now() - age);
+            }
+            if (this.#sizes) {
+                entry.size = this.#sizes[i];
+            }
+            arr.unshift([key, entry]);
+        }
+        return arr;
+    }
+    /**
+     * Reset the cache and load in the items in entries in the order listed.
+     * Note that the shape of the resulting cache may be different if the
+     * same options are not used in both caches.
+     */
+    load(arr) {
+        this.clear();
+        for (const [key, entry] of arr) {
+            if (entry.start) {
+                // entry.start is a portable timestamp, but we may be using
+                // node's performance.now(), so calculate the offset, so that
+                // we get the intended remaining TTL, no matter how long it's
+                // been on ice.
+                //
+                // it's ok for this to be a bit slow, it's a rare operation.
+                const age = Date.now() - entry.start;
+                entry.start = perf.now() - age;
+            }
+            this.set(key, entry.value, entry);
+        }
+    }
+    /**
+     * Add a value to the cache.
+     */
+    set(k, v, setOptions = {}) {
+        const { ttl = this.ttl, start, noDisposeOnSet = this.noDisposeOnSet, sizeCalculation = this.sizeCalculation, status, } = setOptions;
+        let { noUpdateTTL = this.noUpdateTTL } = setOptions;
+        const size = this.#requireSize(k, v, setOptions.size || 0, sizeCalculation);
+        // if the item doesn't fit, don't do anything
+        // NB: maxEntrySize set to maxSize by default
+        if (this.maxEntrySize && size > this.maxEntrySize) {
+            if (status) {
+                status.set = 'miss';
+                status.maxEntrySizeExceeded = true;
+            }
+            // have to delete, in case something is there already.
+            this.delete(k);
+            return this;
+        }
+        let index = this.#size === 0 ? undefined : this.#keyMap.get(k);
+        if (index === undefined) {
+            // addition
+            index = (this.#size === 0
+                ? this.#tail
+                : this.#free.length !== 0
+                    ? this.#free.pop()
+                    : this.#size === this.#max
+                        ? this.#evict(false)
+                        : this.#size);
+            this.#keyList[index] = k;
+            this.#valList[index] = v;
+            this.#keyMap.set(k, index);
+            this.#next[this.#tail] = index;
+            this.#prev[index] = this.#tail;
+            this.#tail = index;
+            this.#size++;
+            this.#addItemSize(index, size, status);
+            if (status)
+                status.set = 'add';
+            noUpdateTTL = false;
+        }
+        else {
+            // update
+            this.#moveToTail(index);
+            const oldVal = this.#valList[index];
+            if (v !== oldVal) {
+                if (this.#hasFetchMethod && this.#isBackgroundFetch(oldVal)) {
+                    oldVal.__abortController.abort(new Error('replaced'));
+                }
+                else if (!noDisposeOnSet) {
+                    if (this.#hasDispose) {
+                        this.#dispose?.(oldVal, k, 'set');
+                    }
+                    if (this.#hasDisposeAfter) {
+                        this.#disposed?.push([oldVal, k, 'set']);
+                    }
+                }
+                this.#removeItemSize(index);
+                this.#addItemSize(index, size, status);
+                this.#valList[index] = v;
+                if (status) {
+                    status.set = 'replace';
+                    const oldValue = oldVal && this.#isBackgroundFetch(oldVal)
+                        ? oldVal.__staleWhileFetching
+                        : oldVal;
+                    if (oldValue !== undefined)
+                        status.oldValue = oldValue;
+                }
+            }
+            else if (status) {
+                status.set = 'update';
+            }
+        }
+        if (ttl !== 0 && !this.#ttls) {
+            this.#initializeTTLTracking();
+        }
+        if (this.#ttls) {
+            if (!noUpdateTTL) {
+                this.#setItemTTL(index, ttl, start);
+            }
+            if (status)
+                this.#statusTTL(status, index);
+        }
+        if (!noDisposeOnSet && this.#hasDisposeAfter && this.#disposed) {
+            const dt = this.#disposed;
+            let task;
+            while ((task = dt?.shift())) {
+                this.#disposeAfter?.(...task);
+            }
+        }
+        return this;
+    }
+    /**
+     * Evict the least recently used item, returning its value or
+     * `undefined` if cache is empty.
+     */
+    pop() {
+        try {
+            while (this.#size) {
+                const val = this.#valList[this.#head];
+                this.#evict(true);
+                if (this.#isBackgroundFetch(val)) {
+                    if (val.__staleWhileFetching) {
+                        return val.__staleWhileFetching;
+                    }
+                }
+                else if (val !== undefined) {
+                    return val;
+                }
+            }
+        }
+        finally {
+            if (this.#hasDisposeAfter && this.#disposed) {
+                const dt = this.#disposed;
+                let task;
+                while ((task = dt?.shift())) {
+                    this.#disposeAfter?.(...task);
+                }
+            }
+        }
+    }
+    #evict(free) {
+        const head = this.#head;
+        const k = this.#keyList[head];
+        const v = this.#valList[head];
+        if (this.#hasFetchMethod && this.#isBackgroundFetch(v)) {
+            v.__abortController.abort(new Error('evicted'));
+        }
+        else if (this.#hasDispose || this.#hasDisposeAfter) {
+            if (this.#hasDispose) {
+                this.#dispose?.(v, k, 'evict');
+            }
+            if (this.#hasDisposeAfter) {
+                this.#disposed?.push([v, k, 'evict']);
+            }
+        }
+        this.#removeItemSize(head);
+        // if we aren't about to use the index, then null these out
+        if (free) {
+            this.#keyList[head] = undefined;
+            this.#valList[head] = undefined;
+            this.#free.push(head);
+        }
+        if (this.#size === 1) {
+            this.#head = this.#tail = 0;
+            this.#free.length = 0;
+        }
+        else {
+            this.#head = this.#next[head];
+        }
+        this.#keyMap.delete(k);
+        this.#size--;
+        return head;
+    }
+    /**
+     * Check if a key is in the cache, without updating the recency of use.
+     * Will return false if the item is stale, even though it is technically
+     * in the cache.
+     *
+     * Will not update item age unless
+     * {@link LRUCache.OptionsBase.updateAgeOnHas} is set.
+     */
+    has(k, hasOptions = {}) {
+        const { updateAgeOnHas = this.updateAgeOnHas, status } = hasOptions;
+        const index = this.#keyMap.get(k);
+        if (index !== undefined) {
+            const v = this.#valList[index];
+            if (this.#isBackgroundFetch(v) &&
+                v.__staleWhileFetching === undefined) {
+                return false;
+            }
+            if (!this.#isStale(index)) {
+                if (updateAgeOnHas) {
+                    this.#updateItemAge(index);
+                }
+                if (status) {
+                    status.has = 'hit';
+                    this.#statusTTL(status, index);
+                }
+                return true;
+            }
+            else if (status) {
+                status.has = 'stale';
+                this.#statusTTL(status, index);
+            }
+        }
+        else if (status) {
+            status.has = 'miss';
+        }
+        return false;
+    }
+    /**
+     * Like {@link LRUCache#get} but doesn't update recency or delete stale
+     * items.
+     *
+     * Returns `undefined` if the item is stale, unless
+     * {@link LRUCache.OptionsBase.allowStale} is set.
+     */
+    peek(k, peekOptions = {}) {
+        const { allowStale = this.allowStale } = peekOptions;
+        const index = this.#keyMap.get(k);
+        if (index !== undefined &&
+            (allowStale || !this.#isStale(index))) {
+            const v = this.#valList[index];
+            // either stale and allowed, or forcing a refresh of non-stale value
+            return this.#isBackgroundFetch(v) ? v.__staleWhileFetching : v;
+        }
+    }
+    #backgroundFetch(k, index, options, context) {
+        const v = index === undefined ? undefined : this.#valList[index];
+        if (this.#isBackgroundFetch(v)) {
+            return v;
+        }
+        const ac = new AbortController();
+        const { signal } = options;
+        // when/if our AC signals, then stop listening to theirs.
+        signal?.addEventListener('abort', () => ac.abort(signal.reason), {
+            signal: ac.signal,
+        });
+        const fetchOpts = {
+            signal: ac.signal,
+            options,
+            context,
+        };
+        const cb = (v, updateCache = false) => {
+            const { aborted } = ac.signal;
+            const ignoreAbort = options.ignoreFetchAbort && v !== undefined;
+            if (options.status) {
+                if (aborted && !updateCache) {
+                    options.status.fetchAborted = true;
+                    options.status.fetchError = ac.signal.reason;
+                    if (ignoreAbort)
+                        options.status.fetchAbortIgnored = true;
+                }
+                else {
+                    options.status.fetchResolved = true;
+                }
+            }
+            if (aborted && !ignoreAbort && !updateCache) {
+                return fetchFail(ac.signal.reason);
+            }
+            // either we didn't abort, and are still here, or we did, and ignored
+            const bf = p;
+            if (this.#valList[index] === p) {
+                if (v === undefined) {
+                    if (bf.__staleWhileFetching) {
+                        this.#valList[index] = bf.__staleWhileFetching;
+                    }
+                    else {
+                        this.delete(k);
+                    }
+                }
+                else {
+                    if (options.status)
+                        options.status.fetchUpdated = true;
+                    this.set(k, v, fetchOpts.options);
+                }
+            }
+            return v;
+        };
+        const eb = (er) => {
+            if (options.status) {
+                options.status.fetchRejected = true;
+                options.status.fetchError = er;
+            }
+            return fetchFail(er);
+        };
+        const fetchFail = (er) => {
+            const { aborted } = ac.signal;
+            const allowStaleAborted = aborted && options.allowStaleOnFetchAbort;
+            const allowStale = allowStaleAborted || options.allowStaleOnFetchRejection;
+            const noDelete = allowStale || options.noDeleteOnFetchRejection;
+            const bf = p;
+            if (this.#valList[index] === p) {
+                // if we allow stale on fetch rejections, then we need to ensure that
+                // the stale value is not removed from the cache when the fetch fails.
+                const del = !noDelete || bf.__staleWhileFetching === undefined;
+                if (del) {
+                    this.delete(k);
+                }
+                else if (!allowStaleAborted) {
+                    // still replace the *promise* with the stale value,
+                    // since we are done with the promise at this point.
+                    // leave it untouched if we're still waiting for an
+                    // aborted background fetch that hasn't yet returned.
+                    this.#valList[index] = bf.__staleWhileFetching;
+                }
+            }
+            if (allowStale) {
+                if (options.status && bf.__staleWhileFetching !== undefined) {
+                    options.status.returnedStale = true;
+                }
+                return bf.__staleWhileFetching;
+            }
+            else if (bf.__returned === bf) {
+                throw er;
+            }
+        };
+        const pcall = (res, rej) => {
+            const fmp = this.#fetchMethod?.(k, v, fetchOpts);
+            if (fmp && fmp instanceof Promise) {
+                fmp.then(v => res(v), rej);
+            }
+            // ignored, we go until we finish, regardless.
+            // defer check until we are actually aborting,
+            // so fetchMethod can override.
+            ac.signal.addEventListener('abort', () => {
+                if (!options.ignoreFetchAbort ||
+                    options.allowStaleOnFetchAbort) {
+                    res();
+                    // when it eventually resolves, update the cache.
+                    if (options.allowStaleOnFetchAbort) {
+                        res = v => cb(v, true);
+                    }
+                }
+            });
+        };
+        if (options.status)
+            options.status.fetchDispatched = true;
+        const p = new Promise(pcall).then(cb, eb);
+        const bf = Object.assign(p, {
+            __abortController: ac,
+            __staleWhileFetching: v,
+            __returned: undefined,
+        });
+        if (index === undefined) {
+            // internal, don't expose status.
+            this.set(k, bf, { ...fetchOpts.options, status: undefined });
+            index = this.#keyMap.get(k);
+        }
+        else {
+            this.#valList[index] = bf;
+        }
+        return bf;
+    }
+    #isBackgroundFetch(p) {
+        if (!this.#hasFetchMethod)
+            return false;
+        const b = p;
+        return (!!b &&
+            b instanceof Promise &&
+            b.hasOwnProperty('__staleWhileFetching') &&
+            b.__abortController instanceof AbortController);
+    }
+    async fetch(k, fetchOptions = {}) {
+        const { 
+        // get options
+        allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, 
+        // set options
+        ttl = this.ttl, noDisposeOnSet = this.noDisposeOnSet, size = 0, sizeCalculation = this.sizeCalculation, noUpdateTTL = this.noUpdateTTL, 
+        // fetch exclusive options
+        noDeleteOnFetchRejection = this.noDeleteOnFetchRejection, allowStaleOnFetchRejection = this.allowStaleOnFetchRejection, ignoreFetchAbort = this.ignoreFetchAbort, allowStaleOnFetchAbort = this.allowStaleOnFetchAbort, context, forceRefresh = false, status, signal, } = fetchOptions;
+        if (!this.#hasFetchMethod) {
+            if (status)
+                status.fetch = 'get';
+            return this.get(k, {
+                allowStale,
+                updateAgeOnGet,
+                noDeleteOnStaleGet,
+                status,
+            });
+        }
+        const options = {
+            allowStale,
+            updateAgeOnGet,
+            noDeleteOnStaleGet,
+            ttl,
+            noDisposeOnSet,
+            size,
+            sizeCalculation,
+            noUpdateTTL,
+            noDeleteOnFetchRejection,
+            allowStaleOnFetchRejection,
+            allowStaleOnFetchAbort,
+            ignoreFetchAbort,
+            status,
+            signal,
+        };
+        let index = this.#keyMap.get(k);
+        if (index === undefined) {
+            if (status)
+                status.fetch = 'miss';
+            const p = this.#backgroundFetch(k, index, options, context);
+            return (p.__returned = p);
+        }
+        else {
+            // in cache, maybe already fetching
+            const v = this.#valList[index];
+            if (this.#isBackgroundFetch(v)) {
+                const stale = allowStale && v.__staleWhileFetching !== undefined;
+                if (status) {
+                    status.fetch = 'inflight';
+                    if (stale)
+                        status.returnedStale = true;
+                }
+                return stale ? v.__staleWhileFetching : (v.__returned = v);
+            }
+            // if we force a refresh, that means do NOT serve the cached value,
+            // unless we are already in the process of refreshing the cache.
+            const isStale = this.#isStale(index);
+            if (!forceRefresh && !isStale) {
+                if (status)
+                    status.fetch = 'hit';
+                this.#moveToTail(index);
+                if (updateAgeOnGet) {
+                    this.#updateItemAge(index);
+                }
+                if (status)
+                    this.#statusTTL(status, index);
+                return v;
+            }
+            // ok, it is stale or a forced refresh, and not already fetching.
+            // refresh the cache.
+            const p = this.#backgroundFetch(k, index, options, context);
+            const hasStale = p.__staleWhileFetching !== undefined;
+            const staleVal = hasStale && allowStale;
+            if (status) {
+                status.fetch = isStale ? 'stale' : 'refresh';
+                if (staleVal && isStale)
+                    status.returnedStale = true;
+            }
+            return staleVal ? p.__staleWhileFetching : (p.__returned = p);
+        }
+    }
+    /**
+     * Return a value from the cache. Will update the recency of the cache
+     * entry found.
+     *
+     * If the key is not found, get() will return `undefined`.
+     */
+    get(k, getOptions = {}) {
+        const { allowStale = this.allowStale, updateAgeOnGet = this.updateAgeOnGet, noDeleteOnStaleGet = this.noDeleteOnStaleGet, status, } = getOptions;
+        const index = this.#keyMap.get(k);
+        if (index !== undefined) {
+            const value = this.#valList[index];
+            const fetching = this.#isBackgroundFetch(value);
+            if (status)
+                this.#statusTTL(status, index);
+            if (this.#isStale(index)) {
+                if (status)
+                    status.get = 'stale';
+                // delete only if not an in-flight background fetch
+                if (!fetching) {
+                    if (!noDeleteOnStaleGet) {
+                        this.delete(k);
+                    }
+                    if (status && allowStale)
+                        status.returnedStale = true;
+                    return allowStale ? value : undefined;
+                }
+                else {
+                    if (status &&
+                        allowStale &&
+                        value.__staleWhileFetching !== undefined) {
+                        status.returnedStale = true;
+                    }
+                    return allowStale ? value.__staleWhileFetching : undefined;
+                }
+            }
+            else {
+                if (status)
+                    status.get = 'hit';
+                // if we're currently fetching it, we don't actually have it yet
+                // it's not stale, which means this isn't a staleWhileRefetching.
+                // If it's not stale, and fetching, AND has a __staleWhileFetching
+                // value, then that means the user fetched with {forceRefresh:true},
+                // so it's safe to return that value.
+                if (fetching) {
+                    return value.__staleWhileFetching;
+                }
+                this.#moveToTail(index);
+                if (updateAgeOnGet) {
+                    this.#updateItemAge(index);
+                }
+                return value;
+            }
+        }
+        else if (status) {
+            status.get = 'miss';
+        }
+    }
+    #connect(p, n) {
+        this.#prev[n] = p;
+        this.#next[p] = n;
+    }
+    #moveToTail(index) {
+        // if tail already, nothing to do
+        // if head, move head to next[index]
+        // else
+        //   move next[prev[index]] to next[index] (head has no prev)
+        //   move prev[next[index]] to prev[index]
+        // prev[index] = tail
+        // next[tail] = index
+        // tail = index
+        if (index !== this.#tail) {
+            if (index === this.#head) {
+                this.#head = this.#next[index];
+            }
+            else {
+                this.#connect(this.#prev[index], this.#next[index]);
+            }
+            this.#connect(this.#tail, index);
+            this.#tail = index;
+        }
+    }
+    /**
+     * Deletes a key out of the cache.
+     * Returns true if the key was deleted, false otherwise.
+     */
+    delete(k) {
+        let deleted = false;
+        if (this.#size !== 0) {
+            const index = this.#keyMap.get(k);
+            if (index !== undefined) {
+                deleted = true;
+                if (this.#size === 1) {
+                    this.clear();
+                }
+                else {
+                    this.#removeItemSize(index);
+                    const v = this.#valList[index];
+                    if (this.#isBackgroundFetch(v)) {
+                        v.__abortController.abort(new Error('deleted'));
+                    }
+                    else if (this.#hasDispose || this.#hasDisposeAfter) {
+                        if (this.#hasDispose) {
+                            this.#dispose?.(v, k, 'delete');
+                        }
+                        if (this.#hasDisposeAfter) {
+                            this.#disposed?.push([v, k, 'delete']);
+                        }
+                    }
+                    this.#keyMap.delete(k);
+                    this.#keyList[index] = undefined;
+                    this.#valList[index] = undefined;
+                    if (index === this.#tail) {
+                        this.#tail = this.#prev[index];
+                    }
+                    else if (index === this.#head) {
+                        this.#head = this.#next[index];
+                    }
+                    else {
+                        this.#next[this.#prev[index]] = this.#next[index];
+                        this.#prev[this.#next[index]] = this.#prev[index];
+                    }
+                    this.#size--;
+                    this.#free.push(index);
+                }
+            }
+        }
+        if (this.#hasDisposeAfter && this.#disposed?.length) {
+            const dt = this.#disposed;
+            let task;
+            while ((task = dt?.shift())) {
+                this.#disposeAfter?.(...task);
+            }
+        }
+        return deleted;
+    }
+    /**
+     * Clear the cache entirely, throwing away all values.
+     */
+    clear() {
+        for (const index of this.#rindexes({ allowStale: true })) {
+            const v = this.#valList[index];
+            if (this.#isBackgroundFetch(v)) {
+                v.__abortController.abort(new Error('deleted'));
+            }
+            else {
+                const k = this.#keyList[index];
+                if (this.#hasDispose) {
+                    this.#dispose?.(v, k, 'delete');
+                }
+                if (this.#hasDisposeAfter) {
+                    this.#disposed?.push([v, k, 'delete']);
+                }
+            }
+        }
+        this.#keyMap.clear();
+        this.#valList.fill(undefined);
+        this.#keyList.fill(undefined);
+        if (this.#ttls && this.#starts) {
+            this.#ttls.fill(0);
+            this.#starts.fill(0);
+        }
+        if (this.#sizes) {
+            this.#sizes.fill(0);
+        }
+        this.#head = 0;
+        this.#tail = 0;
+        this.#free.length = 0;
+        this.#calculatedSize = 0;
+        this.#size = 0;
+        if (this.#hasDisposeAfter && this.#disposed) {
+            const dt = this.#disposed;
+            let task;
+            while ((task = dt?.shift())) {
+                this.#disposeAfter?.(...task);
+            }
+        }
+    }
 }
+var LRU = LRUCache;
 
-const forEachStep = (self, fn, node, thisp) => {
-  let hit = node.value;
-  if (isStale(self, hit)) {
-    del(self, node);
-    if (!self[ALLOW_STALE])
-      hit = undefined;
-  }
-  if (hit)
-    fn.call(thisp, hit.value, hit.key, self);
-};
-
-var lruCache = LRUCache;
-
-var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+const comma$1 = ','.charCodeAt(0);
+const semicolon$1 = ';'.charCodeAt(0);
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const intToChar = new Uint8Array(64); // 64 possible chars.
+const charToInt = new Uint8Array(128); // z is 122 in ASCII
+for (let i = 0; i < chars.length; i++) {
+    const c = chars.charCodeAt(i);
+    intToChar[i] = c;
+    charToInt[c] = i;
+}
+// Provide a fallback for older environments.
+const td = typeof TextDecoder !== 'undefined'
+    ? /* #__PURE__ */ new TextDecoder()
+    : typeof Buffer !== 'undefined'
+        ? {
+            decode(buf) {
+                const out = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+                return out.toString();
+            },
+        }
+        : {
+            decode(buf) {
+                let out = '';
+                for (let i = 0; i < buf.length; i++) {
+                    out += String.fromCharCode(buf[i]);
+                }
+                return out;
+            },
+        };
 function encode(decoded) {
-    var sourceFileIndex = 0; // second field
-    var sourceCodeLine = 0; // third field
-    var sourceCodeColumn = 0; // fourth field
-    var nameIndex = 0; // fifth field
-    var mappings = '';
-    for (var i = 0; i < decoded.length; i++) {
-        var line = decoded[i];
-        if (i > 0)
-            mappings += ';';
+    const state = new Int32Array(5);
+    const bufLength = 1024 * 16;
+    const subLength = bufLength - 36;
+    const buf = new Uint8Array(bufLength);
+    const sub = buf.subarray(0, subLength);
+    let pos = 0;
+    let out = '';
+    for (let i = 0; i < decoded.length; i++) {
+        const line = decoded[i];
+        if (i > 0) {
+            if (pos === bufLength) {
+                out += td.decode(buf);
+                pos = 0;
+            }
+            buf[pos++] = semicolon$1;
+        }
         if (line.length === 0)
             continue;
-        var generatedCodeColumn = 0; // first field
-        var lineMappings = [];
-        for (var _i = 0, line_1 = line; _i < line_1.length; _i++) {
-            var segment = line_1[_i];
-            var segmentMappings = encodeInteger(segment[0] - generatedCodeColumn);
-            generatedCodeColumn = segment[0];
-            if (segment.length > 1) {
-                segmentMappings +=
-                    encodeInteger(segment[1] - sourceFileIndex) +
-                        encodeInteger(segment[2] - sourceCodeLine) +
-                        encodeInteger(segment[3] - sourceCodeColumn);
-                sourceFileIndex = segment[1];
-                sourceCodeLine = segment[2];
-                sourceCodeColumn = segment[3];
+        state[0] = 0;
+        for (let j = 0; j < line.length; j++) {
+            const segment = line[j];
+            // We can push up to 5 ints, each int can take at most 7 chars, and we
+            // may push a comma.
+            if (pos > subLength) {
+                out += td.decode(sub);
+                buf.copyWithin(0, subLength, pos);
+                pos -= subLength;
             }
-            if (segment.length === 5) {
-                segmentMappings += encodeInteger(segment[4] - nameIndex);
-                nameIndex = segment[4];
-            }
-            lineMappings.push(segmentMappings);
+            if (j > 0)
+                buf[pos++] = comma$1;
+            pos = encodeInteger(buf, pos, state, segment, 0); // genColumn
+            if (segment.length === 1)
+                continue;
+            pos = encodeInteger(buf, pos, state, segment, 1); // sourcesIndex
+            pos = encodeInteger(buf, pos, state, segment, 2); // sourceLine
+            pos = encodeInteger(buf, pos, state, segment, 3); // sourceColumn
+            if (segment.length === 4)
+                continue;
+            pos = encodeInteger(buf, pos, state, segment, 4); // namesIndex
         }
-        mappings += lineMappings.join(',');
     }
-    return mappings;
+    return out + td.decode(buf.subarray(0, pos));
 }
-function encodeInteger(num) {
-    var result = '';
+function encodeInteger(buf, pos, state, segment, j) {
+    const next = segment[j];
+    let num = next - state[j];
+    state[j] = next;
     num = num < 0 ? (-num << 1) | 1 : num << 1;
     do {
-        var clamped = num & 31;
+        let clamped = num & 0b011111;
         num >>>= 5;
-        if (num > 0) {
-            clamped |= 32;
-        }
-        result += chars[clamped];
+        if (num > 0)
+            clamped |= 0b100000;
+        buf[pos++] = intToChar[clamped];
     } while (num > 0);
-    return result;
+    return pos;
 }
 
-var BitSet = function BitSet(arg) {
-	this.bits = arg instanceof BitSet ? arg.bits.slice() : [];
-};
-
-BitSet.prototype.add = function add (n) {
-	this.bits[n >> 5] |= 1 << (n & 31);
-};
-
-BitSet.prototype.has = function has (n) {
-	return !!(this.bits[n >> 5] & (1 << (n & 31)));
-};
-
-var Chunk = function Chunk(start, end, content) {
-	this.start = start;
-	this.end = end;
-	this.original = content;
-
-	this.intro = '';
-	this.outro = '';
-
-	this.content = content;
-	this.storeName = false;
-	this.edited = false;
-
-	// we make these non-enumerable, for sanity while debugging
-	Object.defineProperties(this, {
-		previous: { writable: true, value: null },
-		next: { writable: true, value: null },
-	});
-};
-
-Chunk.prototype.appendLeft = function appendLeft (content) {
-	this.outro += content;
-};
-
-Chunk.prototype.appendRight = function appendRight (content) {
-	this.intro = this.intro + content;
-};
-
-Chunk.prototype.clone = function clone () {
-	var chunk = new Chunk(this.start, this.end, this.original);
-
-	chunk.intro = this.intro;
-	chunk.outro = this.outro;
-	chunk.content = this.content;
-	chunk.storeName = this.storeName;
-	chunk.edited = this.edited;
-
-	return chunk;
-};
-
-Chunk.prototype.contains = function contains (index) {
-	return this.start < index && index < this.end;
-};
-
-Chunk.prototype.eachNext = function eachNext (fn) {
-	var chunk = this;
-	while (chunk) {
-		fn(chunk);
-		chunk = chunk.next;
+class BitSet {
+	constructor(arg) {
+		this.bits = arg instanceof BitSet ? arg.bits.slice() : [];
 	}
-};
 
-Chunk.prototype.eachPrevious = function eachPrevious (fn) {
-	var chunk = this;
-	while (chunk) {
-		fn(chunk);
-		chunk = chunk.previous;
+	add(n) {
+		this.bits[n >> 5] |= 1 << (n & 31);
 	}
-};
 
-Chunk.prototype.edit = function edit (content, storeName, contentOnly) {
-	this.content = content;
-	if (!contentOnly) {
+	has(n) {
+		return !!(this.bits[n >> 5] & (1 << (n & 31)));
+	}
+}
+
+class Chunk {
+	constructor(start, end, content) {
+		this.start = start;
+		this.end = end;
+		this.original = content;
+
 		this.intro = '';
 		this.outro = '';
-	}
-	this.storeName = storeName;
 
-	this.edited = true;
+		this.content = content;
+		this.storeName = false;
+		this.edited = false;
 
-	return this;
-};
-
-Chunk.prototype.prependLeft = function prependLeft (content) {
-	this.outro = content + this.outro;
-};
-
-Chunk.prototype.prependRight = function prependRight (content) {
-	this.intro = content + this.intro;
-};
-
-Chunk.prototype.split = function split (index) {
-	var sliceIndex = index - this.start;
-
-	var originalBefore = this.original.slice(0, sliceIndex);
-	var originalAfter = this.original.slice(sliceIndex);
-
-	this.original = originalBefore;
-
-	var newChunk = new Chunk(index, this.end, originalAfter);
-	newChunk.outro = this.outro;
-	this.outro = '';
-
-	this.end = index;
-
-	if (this.edited) {
-		// TODO is this block necessary?...
-		newChunk.edit('', false);
-		this.content = '';
-	} else {
-		this.content = originalBefore;
-	}
-
-	newChunk.next = this.next;
-	if (newChunk.next) { newChunk.next.previous = newChunk; }
-	newChunk.previous = this;
-	this.next = newChunk;
-
-	return newChunk;
-};
-
-Chunk.prototype.toString = function toString () {
-	return this.intro + this.content + this.outro;
-};
-
-Chunk.prototype.trimEnd = function trimEnd (rx) {
-	this.outro = this.outro.replace(rx, '');
-	if (this.outro.length) { return true; }
-
-	var trimmed = this.content.replace(rx, '');
-
-	if (trimmed.length) {
-		if (trimmed !== this.content) {
-			this.split(this.start + trimmed.length).edit('', undefined, true);
+		{
+			this.previous = null;
+			this.next = null;
 		}
-		return true;
-	} else {
-		this.edit('', undefined, true);
-
-		this.intro = this.intro.replace(rx, '');
-		if (this.intro.length) { return true; }
 	}
-};
 
-Chunk.prototype.trimStart = function trimStart (rx) {
-	this.intro = this.intro.replace(rx, '');
-	if (this.intro.length) { return true; }
+	appendLeft(content) {
+		this.outro += content;
+	}
 
-	var trimmed = this.content.replace(rx, '');
+	appendRight(content) {
+		this.intro = this.intro + content;
+	}
 
-	if (trimmed.length) {
-		if (trimmed !== this.content) {
-			this.split(this.end - trimmed.length);
-			this.edit('', undefined, true);
+	clone() {
+		const chunk = new Chunk(this.start, this.end, this.original);
+
+		chunk.intro = this.intro;
+		chunk.outro = this.outro;
+		chunk.content = this.content;
+		chunk.storeName = this.storeName;
+		chunk.edited = this.edited;
+
+		return chunk;
+	}
+
+	contains(index) {
+		return this.start < index && index < this.end;
+	}
+
+	eachNext(fn) {
+		let chunk = this;
+		while (chunk) {
+			fn(chunk);
+			chunk = chunk.next;
 		}
-		return true;
-	} else {
-		this.edit('', undefined, true);
+	}
 
+	eachPrevious(fn) {
+		let chunk = this;
+		while (chunk) {
+			fn(chunk);
+			chunk = chunk.previous;
+		}
+	}
+
+	edit(content, storeName, contentOnly) {
+		this.content = content;
+		if (!contentOnly) {
+			this.intro = '';
+			this.outro = '';
+		}
+		this.storeName = storeName;
+
+		this.edited = true;
+
+		return this;
+	}
+
+	prependLeft(content) {
+		this.outro = content + this.outro;
+	}
+
+	prependRight(content) {
+		this.intro = content + this.intro;
+	}
+
+	split(index) {
+		const sliceIndex = index - this.start;
+
+		const originalBefore = this.original.slice(0, sliceIndex);
+		const originalAfter = this.original.slice(sliceIndex);
+
+		this.original = originalBefore;
+
+		const newChunk = new Chunk(index, this.end, originalAfter);
+		newChunk.outro = this.outro;
+		this.outro = '';
+
+		this.end = index;
+
+		if (this.edited) {
+			// TODO is this block necessary?...
+			newChunk.edit('', false);
+			this.content = '';
+		} else {
+			this.content = originalBefore;
+		}
+
+		newChunk.next = this.next;
+		if (newChunk.next) newChunk.next.previous = newChunk;
+		newChunk.previous = this;
+		this.next = newChunk;
+
+		return newChunk;
+	}
+
+	toString() {
+		return this.intro + this.content + this.outro;
+	}
+
+	trimEnd(rx) {
 		this.outro = this.outro.replace(rx, '');
-		if (this.outro.length) { return true; }
-	}
-};
+		if (this.outro.length) return true;
 
-var btoa = function () {
-	throw new Error('Unsupported environment: `window.btoa` or `Buffer` should be supported.');
-};
-if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
-	btoa = function (str) { return window.btoa(unescape(encodeURIComponent(str))); };
-} else if (typeof Buffer === 'function') {
-	btoa = function (str) { return Buffer.from(str, 'utf-8').toString('base64'); };
+		const trimmed = this.content.replace(rx, '');
+
+		if (trimmed.length) {
+			if (trimmed !== this.content) {
+				this.split(this.start + trimmed.length).edit('', undefined, true);
+			}
+			return true;
+		} else {
+			this.edit('', undefined, true);
+
+			this.intro = this.intro.replace(rx, '');
+			if (this.intro.length) return true;
+		}
+	}
+
+	trimStart(rx) {
+		this.intro = this.intro.replace(rx, '');
+		if (this.intro.length) return true;
+
+		const trimmed = this.content.replace(rx, '');
+
+		if (trimmed.length) {
+			if (trimmed !== this.content) {
+				this.split(this.end - trimmed.length);
+				this.edit('', undefined, true);
+			}
+			return true;
+		} else {
+			this.edit('', undefined, true);
+
+			this.outro = this.outro.replace(rx, '');
+			if (this.outro.length) return true;
+		}
+	}
 }
 
-var SourceMap = function SourceMap(properties) {
-	this.version = 3;
-	this.file = properties.file;
-	this.sources = properties.sources;
-	this.sourcesContent = properties.sourcesContent;
-	this.names = properties.names;
-	this.mappings = encode(properties.mappings);
-};
+function getBtoa () {
+	if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+		return (str) => window.btoa(unescape(encodeURIComponent(str)));
+	} else if (typeof Buffer === 'function') {
+		return (str) => Buffer.from(str, 'utf-8').toString('base64');
+	} else {
+		return () => {
+			throw new Error('Unsupported environment: `window.btoa` or `Buffer` should be supported.');
+		};
+	}
+}
 
-SourceMap.prototype.toString = function toString () {
-	return JSON.stringify(this);
-};
+const btoa = /*#__PURE__*/ getBtoa();
 
-SourceMap.prototype.toUrl = function toUrl () {
-	return 'data:application/json;charset=utf-8;base64,' + btoa(this.toString());
-};
+class SourceMap {
+	constructor(properties) {
+		this.version = 3;
+		this.file = properties.file;
+		this.sources = properties.sources;
+		this.sourcesContent = properties.sourcesContent;
+		this.names = properties.names;
+		this.mappings = encode(properties.mappings);
+		if (typeof properties.x_google_ignoreList !== 'undefined') {
+			this.x_google_ignoreList = properties.x_google_ignoreList;
+		}
+	}
+
+	toString() {
+		return JSON.stringify(this);
+	}
+
+	toUrl() {
+		return 'data:application/json;charset=utf-8;base64,' + btoa(this.toString());
+	}
+}
 
 function guessIndent(code) {
-	var lines = code.split('\n');
+	const lines = code.split('\n');
 
-	var tabbed = lines.filter(function (line) { return /^\t+/.test(line); });
-	var spaced = lines.filter(function (line) { return /^ {2,}/.test(line); });
+	const tabbed = lines.filter((line) => /^\t+/.test(line));
+	const spaced = lines.filter((line) => /^ {2,}/.test(line));
 
 	if (tabbed.length === 0 && spaced.length === 0) {
 		return null;
@@ -1869,8 +2472,8 @@ function guessIndent(code) {
 	}
 
 	// Otherwise, we need to guess the multiple
-	var min = spaced.reduce(function (previous, current) {
-		var numSpaces = /^ +/.exec(current)[0].length;
+	const min = spaced.reduce((previous, current) => {
+		const numSpaces = /^ +/.exec(current)[0].length;
 		return Math.min(numSpaces, previous);
 	}, Infinity);
 
@@ -1878,8 +2481,8 @@ function guessIndent(code) {
 }
 
 function getRelativePath(from, to) {
-	var fromParts = from.split(/[/\\]/);
-	var toParts = to.split(/[/\\]/);
+	const fromParts = from.split(/[/\\]/);
+	const toParts = to.split(/[/\\]/);
 
 	fromParts.pop(); // get dirname
 
@@ -1889,797 +2492,916 @@ function getRelativePath(from, to) {
 	}
 
 	if (fromParts.length) {
-		var i = fromParts.length;
-		while (i--) { fromParts[i] = '..'; }
+		let i = fromParts.length;
+		while (i--) fromParts[i] = '..';
 	}
 
 	return fromParts.concat(toParts).join('/');
 }
 
-var toString = Object.prototype.toString;
+const toString = Object.prototype.toString;
 
 function isObject(thing) {
 	return toString.call(thing) === '[object Object]';
 }
 
 function getLocator(source) {
-	var originalLines = source.split('\n');
-	var lineOffsets = [];
+	const originalLines = source.split('\n');
+	const lineOffsets = [];
 
-	for (var i = 0, pos = 0; i < originalLines.length; i++) {
+	for (let i = 0, pos = 0; i < originalLines.length; i++) {
 		lineOffsets.push(pos);
 		pos += originalLines[i].length + 1;
 	}
 
 	return function locate(index) {
-		var i = 0;
-		var j = lineOffsets.length;
+		let i = 0;
+		let j = lineOffsets.length;
 		while (i < j) {
-			var m = (i + j) >> 1;
+			const m = (i + j) >> 1;
 			if (index < lineOffsets[m]) {
 				j = m;
 			} else {
 				i = m + 1;
 			}
 		}
-		var line = i - 1;
-		var column = index - lineOffsets[line];
-		return { line: line, column: column };
+		const line = i - 1;
+		const column = index - lineOffsets[line];
+		return { line, column };
 	};
 }
 
-var Mappings = function Mappings(hires) {
-	this.hires = hires;
-	this.generatedCodeLine = 0;
-	this.generatedCodeColumn = 0;
-	this.raw = [];
-	this.rawSegments = this.raw[this.generatedCodeLine] = [];
-	this.pending = null;
-};
-
-Mappings.prototype.addEdit = function addEdit (sourceIndex, content, loc, nameIndex) {
-	if (content.length) {
-		var segment = [this.generatedCodeColumn, sourceIndex, loc.line, loc.column];
-		if (nameIndex >= 0) {
-			segment.push(nameIndex);
-		}
-		this.rawSegments.push(segment);
-	} else if (this.pending) {
-		this.rawSegments.push(this.pending);
-	}
-
-	this.advance(content);
-	this.pending = null;
-};
-
-Mappings.prototype.addUneditedChunk = function addUneditedChunk (sourceIndex, chunk, original, loc, sourcemapLocations) {
-	var originalCharIndex = chunk.start;
-	var first = true;
-
-	while (originalCharIndex < chunk.end) {
-		if (this.hires || first || sourcemapLocations.has(originalCharIndex)) {
-			this.rawSegments.push([this.generatedCodeColumn, sourceIndex, loc.line, loc.column]);
-		}
-
-		if (original[originalCharIndex] === '\n') {
-			loc.line += 1;
-			loc.column = 0;
-			this.generatedCodeLine += 1;
-			this.raw[this.generatedCodeLine] = this.rawSegments = [];
-			this.generatedCodeColumn = 0;
-			first = true;
-		} else {
-			loc.column += 1;
-			this.generatedCodeColumn += 1;
-			first = false;
-		}
-
-		originalCharIndex += 1;
-	}
-
-	this.pending = null;
-};
-
-Mappings.prototype.advance = function advance (str) {
-	if (!str) { return; }
-
-	var lines = str.split('\n');
-
-	if (lines.length > 1) {
-		for (var i = 0; i < lines.length - 1; i++) {
-			this.generatedCodeLine++;
-			this.raw[this.generatedCodeLine] = this.rawSegments = [];
-		}
+class Mappings {
+	constructor(hires) {
+		this.hires = hires;
+		this.generatedCodeLine = 0;
 		this.generatedCodeColumn = 0;
+		this.raw = [];
+		this.rawSegments = this.raw[this.generatedCodeLine] = [];
+		this.pending = null;
 	}
 
-	this.generatedCodeColumn += lines[lines.length - 1].length;
-};
+	addEdit(sourceIndex, content, loc, nameIndex) {
+		if (content.length) {
+			const segment = [this.generatedCodeColumn, sourceIndex, loc.line, loc.column];
+			if (nameIndex >= 0) {
+				segment.push(nameIndex);
+			}
+			this.rawSegments.push(segment);
+		} else if (this.pending) {
+			this.rawSegments.push(this.pending);
+		}
 
-var n = '\n';
+		this.advance(content);
+		this.pending = null;
+	}
 
-var warned = {
+	addUneditedChunk(sourceIndex, chunk, original, loc, sourcemapLocations) {
+		let originalCharIndex = chunk.start;
+		let first = true;
+
+		while (originalCharIndex < chunk.end) {
+			if (this.hires || first || sourcemapLocations.has(originalCharIndex)) {
+				this.rawSegments.push([this.generatedCodeColumn, sourceIndex, loc.line, loc.column]);
+			}
+
+			if (original[originalCharIndex] === '\n') {
+				loc.line += 1;
+				loc.column = 0;
+				this.generatedCodeLine += 1;
+				this.raw[this.generatedCodeLine] = this.rawSegments = [];
+				this.generatedCodeColumn = 0;
+				first = true;
+			} else {
+				loc.column += 1;
+				this.generatedCodeColumn += 1;
+				first = false;
+			}
+
+			originalCharIndex += 1;
+		}
+
+		this.pending = null;
+	}
+
+	advance(str) {
+		if (!str) return;
+
+		const lines = str.split('\n');
+
+		if (lines.length > 1) {
+			for (let i = 0; i < lines.length - 1; i++) {
+				this.generatedCodeLine++;
+				this.raw[this.generatedCodeLine] = this.rawSegments = [];
+			}
+			this.generatedCodeColumn = 0;
+		}
+
+		this.generatedCodeColumn += lines[lines.length - 1].length;
+	}
+}
+
+const n = '\n';
+
+const warned = {
 	insertLeft: false,
 	insertRight: false,
 	storeName: false,
 };
 
-var MagicString = function MagicString(string, options) {
-	if ( options === void 0 ) options = {};
+class MagicString {
+	constructor(string, options = {}) {
+		const chunk = new Chunk(0, string.length, string);
 
-	var chunk = new Chunk(0, string.length, string);
-
-	Object.defineProperties(this, {
-		original: { writable: true, value: string },
-		outro: { writable: true, value: '' },
-		intro: { writable: true, value: '' },
-		firstChunk: { writable: true, value: chunk },
-		lastChunk: { writable: true, value: chunk },
-		lastSearchedChunk: { writable: true, value: chunk },
-		byStart: { writable: true, value: {} },
-		byEnd: { writable: true, value: {} },
-		filename: { writable: true, value: options.filename },
-		indentExclusionRanges: { writable: true, value: options.indentExclusionRanges },
-		sourcemapLocations: { writable: true, value: new BitSet() },
-		storedNames: { writable: true, value: {} },
-		indentStr: { writable: true, value: guessIndent(string) },
-	});
-
-	this.byStart[0] = chunk;
-	this.byEnd[string.length] = chunk;
-};
-
-MagicString.prototype.addSourcemapLocation = function addSourcemapLocation (char) {
-	this.sourcemapLocations.add(char);
-};
-
-MagicString.prototype.append = function append (content) {
-	if (typeof content !== 'string') { throw new TypeError('outro content must be a string'); }
-
-	this.outro += content;
-	return this;
-};
-
-MagicString.prototype.appendLeft = function appendLeft (index, content) {
-	if (typeof content !== 'string') { throw new TypeError('inserted content must be a string'); }
-
-	this._split(index);
-
-	var chunk = this.byEnd[index];
-
-	if (chunk) {
-		chunk.appendLeft(content);
-	} else {
-		this.intro += content;
-	}
-	return this;
-};
-
-MagicString.prototype.appendRight = function appendRight (index, content) {
-	if (typeof content !== 'string') { throw new TypeError('inserted content must be a string'); }
-
-	this._split(index);
-
-	var chunk = this.byStart[index];
-
-	if (chunk) {
-		chunk.appendRight(content);
-	} else {
-		this.outro += content;
-	}
-	return this;
-};
-
-MagicString.prototype.clone = function clone () {
-	var cloned = new MagicString(this.original, { filename: this.filename });
-
-	var originalChunk = this.firstChunk;
-	var clonedChunk = (cloned.firstChunk = cloned.lastSearchedChunk = originalChunk.clone());
-
-	while (originalChunk) {
-		cloned.byStart[clonedChunk.start] = clonedChunk;
-		cloned.byEnd[clonedChunk.end] = clonedChunk;
-
-		var nextOriginalChunk = originalChunk.next;
-		var nextClonedChunk = nextOriginalChunk && nextOriginalChunk.clone();
-
-		if (nextClonedChunk) {
-			clonedChunk.next = nextClonedChunk;
-			nextClonedChunk.previous = clonedChunk;
-
-			clonedChunk = nextClonedChunk;
-		}
-
-		originalChunk = nextOriginalChunk;
-	}
-
-	cloned.lastChunk = clonedChunk;
-
-	if (this.indentExclusionRanges) {
-		cloned.indentExclusionRanges = this.indentExclusionRanges.slice();
-	}
-
-	cloned.sourcemapLocations = new BitSet(this.sourcemapLocations);
-
-	cloned.intro = this.intro;
-	cloned.outro = this.outro;
-
-	return cloned;
-};
-
-MagicString.prototype.generateDecodedMap = function generateDecodedMap (options) {
-		var this$1$1 = this;
-
-	options = options || {};
-
-	var sourceIndex = 0;
-	var names = Object.keys(this.storedNames);
-	var mappings = new Mappings(options.hires);
-
-	var locate = getLocator(this.original);
-
-	if (this.intro) {
-		mappings.advance(this.intro);
-	}
-
-	this.firstChunk.eachNext(function (chunk) {
-		var loc = locate(chunk.start);
-
-		if (chunk.intro.length) { mappings.advance(chunk.intro); }
-
-		if (chunk.edited) {
-			mappings.addEdit(
-				sourceIndex,
-				chunk.content,
-				loc,
-				chunk.storeName ? names.indexOf(chunk.original) : -1
-			);
-		} else {
-			mappings.addUneditedChunk(sourceIndex, chunk, this$1$1.original, loc, this$1$1.sourcemapLocations);
-		}
-
-		if (chunk.outro.length) { mappings.advance(chunk.outro); }
-	});
-
-	return {
-		file: options.file ? options.file.split(/[/\\]/).pop() : null,
-		sources: [options.source ? getRelativePath(options.file || '', options.source) : null],
-		sourcesContent: options.includeContent ? [this.original] : [null],
-		names: names,
-		mappings: mappings.raw,
-	};
-};
-
-MagicString.prototype.generateMap = function generateMap (options) {
-	return new SourceMap(this.generateDecodedMap(options));
-};
-
-MagicString.prototype.getIndentString = function getIndentString () {
-	return this.indentStr === null ? '\t' : this.indentStr;
-};
-
-MagicString.prototype.indent = function indent (indentStr, options) {
-	var pattern = /^[^\r\n]/gm;
-
-	if (isObject(indentStr)) {
-		options = indentStr;
-		indentStr = undefined;
-	}
-
-	indentStr = indentStr !== undefined ? indentStr : this.indentStr || '\t';
-
-	if (indentStr === '') { return this; } // noop
-
-	options = options || {};
-
-	// Process exclusion ranges
-	var isExcluded = {};
-
-	if (options.exclude) {
-		var exclusions =
-			typeof options.exclude[0] === 'number' ? [options.exclude] : options.exclude;
-		exclusions.forEach(function (exclusion) {
-			for (var i = exclusion[0]; i < exclusion[1]; i += 1) {
-				isExcluded[i] = true;
-			}
+		Object.defineProperties(this, {
+			original: { writable: true, value: string },
+			outro: { writable: true, value: '' },
+			intro: { writable: true, value: '' },
+			firstChunk: { writable: true, value: chunk },
+			lastChunk: { writable: true, value: chunk },
+			lastSearchedChunk: { writable: true, value: chunk },
+			byStart: { writable: true, value: {} },
+			byEnd: { writable: true, value: {} },
+			filename: { writable: true, value: options.filename },
+			indentExclusionRanges: { writable: true, value: options.indentExclusionRanges },
+			sourcemapLocations: { writable: true, value: new BitSet() },
+			storedNames: { writable: true, value: {} },
+			indentStr: { writable: true, value: undefined },
+			ignoreList: { writable: true, value: options.ignoreList },
 		});
+
+		this.byStart[0] = chunk;
+		this.byEnd[string.length] = chunk;
 	}
 
-	var shouldIndentNextCharacter = options.indentStart !== false;
-	var replacer = function (match) {
-		if (shouldIndentNextCharacter) { return ("" + indentStr + match); }
-		shouldIndentNextCharacter = true;
-		return match;
-	};
+	addSourcemapLocation(char) {
+		this.sourcemapLocations.add(char);
+	}
 
-	this.intro = this.intro.replace(pattern, replacer);
+	append(content) {
+		if (typeof content !== 'string') throw new TypeError('outro content must be a string');
 
-	var charIndex = 0;
-	var chunk = this.firstChunk;
+		this.outro += content;
+		return this;
+	}
 
-	while (chunk) {
-		var end = chunk.end;
+	appendLeft(index, content) {
+		if (typeof content !== 'string') throw new TypeError('inserted content must be a string');
 
-		if (chunk.edited) {
-			if (!isExcluded[charIndex]) {
-				chunk.content = chunk.content.replace(pattern, replacer);
+		this._split(index);
 
-				if (chunk.content.length) {
-					shouldIndentNextCharacter = chunk.content[chunk.content.length - 1] === '\n';
-				}
-			}
+		const chunk = this.byEnd[index];
+
+		if (chunk) {
+			chunk.appendLeft(content);
 		} else {
-			charIndex = chunk.start;
+			this.intro += content;
+		}
+		return this;
+	}
 
-			while (charIndex < end) {
+	appendRight(index, content) {
+		if (typeof content !== 'string') throw new TypeError('inserted content must be a string');
+
+		this._split(index);
+
+		const chunk = this.byStart[index];
+
+		if (chunk) {
+			chunk.appendRight(content);
+		} else {
+			this.outro += content;
+		}
+		return this;
+	}
+
+	clone() {
+		const cloned = new MagicString(this.original, { filename: this.filename });
+
+		let originalChunk = this.firstChunk;
+		let clonedChunk = (cloned.firstChunk = cloned.lastSearchedChunk = originalChunk.clone());
+
+		while (originalChunk) {
+			cloned.byStart[clonedChunk.start] = clonedChunk;
+			cloned.byEnd[clonedChunk.end] = clonedChunk;
+
+			const nextOriginalChunk = originalChunk.next;
+			const nextClonedChunk = nextOriginalChunk && nextOriginalChunk.clone();
+
+			if (nextClonedChunk) {
+				clonedChunk.next = nextClonedChunk;
+				nextClonedChunk.previous = clonedChunk;
+
+				clonedChunk = nextClonedChunk;
+			}
+
+			originalChunk = nextOriginalChunk;
+		}
+
+		cloned.lastChunk = clonedChunk;
+
+		if (this.indentExclusionRanges) {
+			cloned.indentExclusionRanges = this.indentExclusionRanges.slice();
+		}
+
+		cloned.sourcemapLocations = new BitSet(this.sourcemapLocations);
+
+		cloned.intro = this.intro;
+		cloned.outro = this.outro;
+
+		return cloned;
+	}
+
+	generateDecodedMap(options) {
+		options = options || {};
+
+		const sourceIndex = 0;
+		const names = Object.keys(this.storedNames);
+		const mappings = new Mappings(options.hires);
+
+		const locate = getLocator(this.original);
+
+		if (this.intro) {
+			mappings.advance(this.intro);
+		}
+
+		this.firstChunk.eachNext((chunk) => {
+			const loc = locate(chunk.start);
+
+			if (chunk.intro.length) mappings.advance(chunk.intro);
+
+			if (chunk.edited) {
+				mappings.addEdit(
+					sourceIndex,
+					chunk.content,
+					loc,
+					chunk.storeName ? names.indexOf(chunk.original) : -1
+				);
+			} else {
+				mappings.addUneditedChunk(sourceIndex, chunk, this.original, loc, this.sourcemapLocations);
+			}
+
+			if (chunk.outro.length) mappings.advance(chunk.outro);
+		});
+
+		return {
+			file: options.file ? options.file.split(/[/\\]/).pop() : undefined,
+			sources: [options.source ? getRelativePath(options.file || '', options.source) : (options.file || '')],
+			sourcesContent: options.includeContent ? [this.original] : undefined,
+			names,
+			mappings: mappings.raw,
+			x_google_ignoreList: this.ignoreList ? [sourceIndex] : undefined
+		};
+	}
+
+	generateMap(options) {
+		return new SourceMap(this.generateDecodedMap(options));
+	}
+
+	_ensureindentStr() {
+		if (this.indentStr === undefined) {
+			this.indentStr = guessIndent(this.original);
+		}
+	}
+
+	_getRawIndentString() {
+		this._ensureindentStr();
+		return this.indentStr;
+	}
+
+	getIndentString() {
+		this._ensureindentStr();
+		return this.indentStr === null ? '\t' : this.indentStr;
+	}
+
+	indent(indentStr, options) {
+		const pattern = /^[^\r\n]/gm;
+
+		if (isObject(indentStr)) {
+			options = indentStr;
+			indentStr = undefined;
+		}
+
+		if (indentStr === undefined) {
+			this._ensureindentStr();
+			indentStr = this.indentStr || '\t';
+		}
+
+		if (indentStr === '') return this; // noop
+
+		options = options || {};
+
+		// Process exclusion ranges
+		const isExcluded = {};
+
+		if (options.exclude) {
+			const exclusions =
+				typeof options.exclude[0] === 'number' ? [options.exclude] : options.exclude;
+			exclusions.forEach((exclusion) => {
+				for (let i = exclusion[0]; i < exclusion[1]; i += 1) {
+					isExcluded[i] = true;
+				}
+			});
+		}
+
+		let shouldIndentNextCharacter = options.indentStart !== false;
+		const replacer = (match) => {
+			if (shouldIndentNextCharacter) return `${indentStr}${match}`;
+			shouldIndentNextCharacter = true;
+			return match;
+		};
+
+		this.intro = this.intro.replace(pattern, replacer);
+
+		let charIndex = 0;
+		let chunk = this.firstChunk;
+
+		while (chunk) {
+			const end = chunk.end;
+
+			if (chunk.edited) {
 				if (!isExcluded[charIndex]) {
-					var char = this.original[charIndex];
+					chunk.content = chunk.content.replace(pattern, replacer);
 
-					if (char === '\n') {
-						shouldIndentNextCharacter = true;
-					} else if (char !== '\r' && shouldIndentNextCharacter) {
-						shouldIndentNextCharacter = false;
-
-						if (charIndex === chunk.start) {
-							chunk.prependRight(indentStr);
-						} else {
-							this._splitChunk(chunk, charIndex);
-							chunk = chunk.next;
-							chunk.prependRight(indentStr);
-						}
+					if (chunk.content.length) {
+						shouldIndentNextCharacter = chunk.content[chunk.content.length - 1] === '\n';
 					}
 				}
+			} else {
+				charIndex = chunk.start;
 
-				charIndex += 1;
+				while (charIndex < end) {
+					if (!isExcluded[charIndex]) {
+						const char = this.original[charIndex];
+
+						if (char === '\n') {
+							shouldIndentNextCharacter = true;
+						} else if (char !== '\r' && shouldIndentNextCharacter) {
+							shouldIndentNextCharacter = false;
+
+							if (charIndex === chunk.start) {
+								chunk.prependRight(indentStr);
+							} else {
+								this._splitChunk(chunk, charIndex);
+								chunk = chunk.next;
+								chunk.prependRight(indentStr);
+							}
+						}
+					}
+
+					charIndex += 1;
+				}
 			}
-		}
 
-		charIndex = chunk.end;
-		chunk = chunk.next;
-	}
-
-	this.outro = this.outro.replace(pattern, replacer);
-
-	return this;
-};
-
-MagicString.prototype.insert = function insert () {
-	throw new Error(
-		'magicString.insert(...) is deprecated. Use prependRight(...) or appendLeft(...)'
-	);
-};
-
-MagicString.prototype.insertLeft = function insertLeft (index, content) {
-	if (!warned.insertLeft) {
-		console.warn(
-			'magicString.insertLeft(...) is deprecated. Use magicString.appendLeft(...) instead'
-		); // eslint-disable-line no-console
-		warned.insertLeft = true;
-	}
-
-	return this.appendLeft(index, content);
-};
-
-MagicString.prototype.insertRight = function insertRight (index, content) {
-	if (!warned.insertRight) {
-		console.warn(
-			'magicString.insertRight(...) is deprecated. Use magicString.prependRight(...) instead'
-		); // eslint-disable-line no-console
-		warned.insertRight = true;
-	}
-
-	return this.prependRight(index, content);
-};
-
-MagicString.prototype.move = function move (start, end, index) {
-	if (index >= start && index <= end) { throw new Error('Cannot move a selection inside itself'); }
-
-	this._split(start);
-	this._split(end);
-	this._split(index);
-
-	var first = this.byStart[start];
-	var last = this.byEnd[end];
-
-	var oldLeft = first.previous;
-	var oldRight = last.next;
-
-	var newRight = this.byStart[index];
-	if (!newRight && last === this.lastChunk) { return this; }
-	var newLeft = newRight ? newRight.previous : this.lastChunk;
-
-	if (oldLeft) { oldLeft.next = oldRight; }
-	if (oldRight) { oldRight.previous = oldLeft; }
-
-	if (newLeft) { newLeft.next = first; }
-	if (newRight) { newRight.previous = last; }
-
-	if (!first.previous) { this.firstChunk = last.next; }
-	if (!last.next) {
-		this.lastChunk = first.previous;
-		this.lastChunk.next = null;
-	}
-
-	first.previous = newLeft;
-	last.next = newRight || null;
-
-	if (!newLeft) { this.firstChunk = first; }
-	if (!newRight) { this.lastChunk = last; }
-	return this;
-};
-
-MagicString.prototype.overwrite = function overwrite (start, end, content, options) {
-	if (typeof content !== 'string') { throw new TypeError('replacement content must be a string'); }
-
-	while (start < 0) { start += this.original.length; }
-	while (end < 0) { end += this.original.length; }
-
-	if (end > this.original.length) { throw new Error('end is out of bounds'); }
-	if (start === end)
-		{ throw new Error(
-			'Cannot overwrite a zero-length range – use appendLeft or prependRight instead'
-		); }
-
-	this._split(start);
-	this._split(end);
-
-	if (options === true) {
-		if (!warned.storeName) {
-			console.warn(
-				'The final argument to magicString.overwrite(...) should be an options object. See https://github.com/rich-harris/magic-string'
-			); // eslint-disable-line no-console
-			warned.storeName = true;
-		}
-
-		options = { storeName: true };
-	}
-	var storeName = options !== undefined ? options.storeName : false;
-	var contentOnly = options !== undefined ? options.contentOnly : false;
-
-	if (storeName) {
-		var original = this.original.slice(start, end);
-		Object.defineProperty(this.storedNames, original, { writable: true, value: true, enumerable: true });
-	}
-
-	var first = this.byStart[start];
-	var last = this.byEnd[end];
-
-	if (first) {
-		var chunk = first;
-		while (chunk !== last) {
-			if (chunk.next !== this.byStart[chunk.end]) {
-				throw new Error('Cannot overwrite across a split point');
-			}
+			charIndex = chunk.end;
 			chunk = chunk.next;
-			chunk.edit('', false);
 		}
 
-		first.edit(content, storeName, contentOnly);
-	} else {
-		// must be inserting at the end
-		var newChunk = new Chunk(start, end, '').edit(content, storeName);
+		this.outro = this.outro.replace(pattern, replacer);
 
-		// TODO last chunk in the array may not be the last chunk, if it's moved...
-		last.next = newChunk;
-		newChunk.previous = last;
-	}
-	return this;
-};
-
-MagicString.prototype.prepend = function prepend (content) {
-	if (typeof content !== 'string') { throw new TypeError('outro content must be a string'); }
-
-	this.intro = content + this.intro;
-	return this;
-};
-
-MagicString.prototype.prependLeft = function prependLeft (index, content) {
-	if (typeof content !== 'string') { throw new TypeError('inserted content must be a string'); }
-
-	this._split(index);
-
-	var chunk = this.byEnd[index];
-
-	if (chunk) {
-		chunk.prependLeft(content);
-	} else {
-		this.intro = content + this.intro;
-	}
-	return this;
-};
-
-MagicString.prototype.prependRight = function prependRight (index, content) {
-	if (typeof content !== 'string') { throw new TypeError('inserted content must be a string'); }
-
-	this._split(index);
-
-	var chunk = this.byStart[index];
-
-	if (chunk) {
-		chunk.prependRight(content);
-	} else {
-		this.outro = content + this.outro;
-	}
-	return this;
-};
-
-MagicString.prototype.remove = function remove (start, end) {
-	while (start < 0) { start += this.original.length; }
-	while (end < 0) { end += this.original.length; }
-
-	if (start === end) { return this; }
-
-	if (start < 0 || end > this.original.length) { throw new Error('Character is out of bounds'); }
-	if (start > end) { throw new Error('end must be greater than start'); }
-
-	this._split(start);
-	this._split(end);
-
-	var chunk = this.byStart[start];
-
-	while (chunk) {
-		chunk.intro = '';
-		chunk.outro = '';
-		chunk.edit('');
-
-		chunk = end > chunk.end ? this.byStart[chunk.end] : null;
-	}
-	return this;
-};
-
-MagicString.prototype.lastChar = function lastChar () {
-	if (this.outro.length) { return this.outro[this.outro.length - 1]; }
-	var chunk = this.lastChunk;
-	do {
-		if (chunk.outro.length) { return chunk.outro[chunk.outro.length - 1]; }
-		if (chunk.content.length) { return chunk.content[chunk.content.length - 1]; }
-		if (chunk.intro.length) { return chunk.intro[chunk.intro.length - 1]; }
-	} while ((chunk = chunk.previous));
-	if (this.intro.length) { return this.intro[this.intro.length - 1]; }
-	return '';
-};
-
-MagicString.prototype.lastLine = function lastLine () {
-	var lineIndex = this.outro.lastIndexOf(n);
-	if (lineIndex !== -1) { return this.outro.substr(lineIndex + 1); }
-	var lineStr = this.outro;
-	var chunk = this.lastChunk;
-	do {
-		if (chunk.outro.length > 0) {
-			lineIndex = chunk.outro.lastIndexOf(n);
-			if (lineIndex !== -1) { return chunk.outro.substr(lineIndex + 1) + lineStr; }
-			lineStr = chunk.outro + lineStr;
-		}
-
-		if (chunk.content.length > 0) {
-			lineIndex = chunk.content.lastIndexOf(n);
-			if (lineIndex !== -1) { return chunk.content.substr(lineIndex + 1) + lineStr; }
-			lineStr = chunk.content + lineStr;
-		}
-
-		if (chunk.intro.length > 0) {
-			lineIndex = chunk.intro.lastIndexOf(n);
-			if (lineIndex !== -1) { return chunk.intro.substr(lineIndex + 1) + lineStr; }
-			lineStr = chunk.intro + lineStr;
-		}
-	} while ((chunk = chunk.previous));
-	lineIndex = this.intro.lastIndexOf(n);
-	if (lineIndex !== -1) { return this.intro.substr(lineIndex + 1) + lineStr; }
-	return this.intro + lineStr;
-};
-
-MagicString.prototype.slice = function slice (start, end) {
-		if ( start === void 0 ) start = 0;
-		if ( end === void 0 ) end = this.original.length;
-
-	while (start < 0) { start += this.original.length; }
-	while (end < 0) { end += this.original.length; }
-
-	var result = '';
-
-	// find start chunk
-	var chunk = this.firstChunk;
-	while (chunk && (chunk.start > start || chunk.end <= start)) {
-		// found end chunk before start
-		if (chunk.start < end && chunk.end >= end) {
-			return result;
-		}
-
-		chunk = chunk.next;
+		return this;
 	}
 
-	if (chunk && chunk.edited && chunk.start !== start)
-		{ throw new Error(("Cannot use replaced character " + start + " as slice start anchor.")); }
-
-	var startChunk = chunk;
-	while (chunk) {
-		if (chunk.intro && (startChunk !== chunk || chunk.start === start)) {
-			result += chunk.intro;
-		}
-
-		var containsEnd = chunk.start < end && chunk.end >= end;
-		if (containsEnd && chunk.edited && chunk.end !== end)
-			{ throw new Error(("Cannot use replaced character " + end + " as slice end anchor.")); }
-
-		var sliceStart = startChunk === chunk ? start - chunk.start : 0;
-		var sliceEnd = containsEnd ? chunk.content.length + end - chunk.end : chunk.content.length;
-
-		result += chunk.content.slice(sliceStart, sliceEnd);
-
-		if (chunk.outro && (!containsEnd || chunk.end === end)) {
-			result += chunk.outro;
-		}
-
-		if (containsEnd) {
-			break;
-		}
-
-		chunk = chunk.next;
-	}
-
-	return result;
-};
-
-// TODO deprecate this? not really very useful
-MagicString.prototype.snip = function snip (start, end) {
-	var clone = this.clone();
-	clone.remove(0, start);
-	clone.remove(end, clone.original.length);
-
-	return clone;
-};
-
-MagicString.prototype._split = function _split (index) {
-	if (this.byStart[index] || this.byEnd[index]) { return; }
-
-	var chunk = this.lastSearchedChunk;
-	var searchForward = index > chunk.end;
-
-	while (chunk) {
-		if (chunk.contains(index)) { return this._splitChunk(chunk, index); }
-
-		chunk = searchForward ? this.byStart[chunk.end] : this.byEnd[chunk.start];
-	}
-};
-
-MagicString.prototype._splitChunk = function _splitChunk (chunk, index) {
-	if (chunk.edited && chunk.content.length) {
-		// zero-length edited chunks are a special case (overlapping replacements)
-		var loc = getLocator(this.original)(index);
+	insert() {
 		throw new Error(
-			("Cannot split a chunk that has already been edited (" + (loc.line) + ":" + (loc.column) + " – \"" + (chunk.original) + "\")")
+			'magicString.insert(...) is deprecated. Use prependRight(...) or appendLeft(...)'
 		);
 	}
 
-	var newChunk = chunk.split(index);
+	insertLeft(index, content) {
+		if (!warned.insertLeft) {
+			console.warn(
+				'magicString.insertLeft(...) is deprecated. Use magicString.appendLeft(...) instead'
+			); // eslint-disable-line no-console
+			warned.insertLeft = true;
+		}
 
-	this.byEnd[index] = chunk;
-	this.byStart[index] = newChunk;
-	this.byEnd[newChunk.end] = newChunk;
-
-	if (chunk === this.lastChunk) { this.lastChunk = newChunk; }
-
-	this.lastSearchedChunk = chunk;
-	return true;
-};
-
-MagicString.prototype.toString = function toString () {
-	var str = this.intro;
-
-	var chunk = this.firstChunk;
-	while (chunk) {
-		str += chunk.toString();
-		chunk = chunk.next;
+		return this.appendLeft(index, content);
 	}
 
-	return str + this.outro;
-};
+	insertRight(index, content) {
+		if (!warned.insertRight) {
+			console.warn(
+				'magicString.insertRight(...) is deprecated. Use magicString.prependRight(...) instead'
+			); // eslint-disable-line no-console
+			warned.insertRight = true;
+		}
 
-MagicString.prototype.isEmpty = function isEmpty () {
-	var chunk = this.firstChunk;
-	do {
-		if (
-			(chunk.intro.length && chunk.intro.trim()) ||
-			(chunk.content.length && chunk.content.trim()) ||
-			(chunk.outro.length && chunk.outro.trim())
-		)
-			{ return false; }
-	} while ((chunk = chunk.next));
-	return true;
-};
+		return this.prependRight(index, content);
+	}
 
-MagicString.prototype.length = function length () {
-	var chunk = this.firstChunk;
-	var length = 0;
-	do {
-		length += chunk.intro.length + chunk.content.length + chunk.outro.length;
-	} while ((chunk = chunk.next));
-	return length;
-};
+	move(start, end, index) {
+		if (index >= start && index <= end) throw new Error('Cannot move a selection inside itself');
 
-MagicString.prototype.trimLines = function trimLines () {
-	return this.trim('[\\r\\n]');
-};
+		this._split(start);
+		this._split(end);
+		this._split(index);
 
-MagicString.prototype.trim = function trim (charType) {
-	return this.trimStart(charType).trimEnd(charType);
-};
+		const first = this.byStart[start];
+		const last = this.byEnd[end];
 
-MagicString.prototype.trimEndAborted = function trimEndAborted (charType) {
-	var rx = new RegExp((charType || '\\s') + '+$');
+		const oldLeft = first.previous;
+		const oldRight = last.next;
 
-	this.outro = this.outro.replace(rx, '');
-	if (this.outro.length) { return true; }
+		const newRight = this.byStart[index];
+		if (!newRight && last === this.lastChunk) return this;
+		const newLeft = newRight ? newRight.previous : this.lastChunk;
 
-	var chunk = this.lastChunk;
+		if (oldLeft) oldLeft.next = oldRight;
+		if (oldRight) oldRight.previous = oldLeft;
 
-	do {
-		var end = chunk.end;
-		var aborted = chunk.trimEnd(rx);
+		if (newLeft) newLeft.next = first;
+		if (newRight) newRight.previous = last;
 
-		// if chunk was trimmed, we have a new lastChunk
-		if (chunk.end !== end) {
-			if (this.lastChunk === chunk) {
-				this.lastChunk = chunk.next;
+		if (!first.previous) this.firstChunk = last.next;
+		if (!last.next) {
+			this.lastChunk = first.previous;
+			this.lastChunk.next = null;
+		}
+
+		first.previous = newLeft;
+		last.next = newRight || null;
+
+		if (!newLeft) this.firstChunk = first;
+		if (!newRight) this.lastChunk = last;
+		return this;
+	}
+
+	overwrite(start, end, content, options) {
+		options = options || {};
+		return this.update(start, end, content, { ...options, overwrite: !options.contentOnly });
+	}
+
+	update(start, end, content, options) {
+		if (typeof content !== 'string') throw new TypeError('replacement content must be a string');
+
+		while (start < 0) start += this.original.length;
+		while (end < 0) end += this.original.length;
+
+		if (end > this.original.length) throw new Error('end is out of bounds');
+		if (start === end)
+			throw new Error(
+				'Cannot overwrite a zero-length range – use appendLeft or prependRight instead'
+			);
+
+		this._split(start);
+		this._split(end);
+
+		if (options === true) {
+			if (!warned.storeName) {
+				console.warn(
+					'The final argument to magicString.overwrite(...) should be an options object. See https://github.com/rich-harris/magic-string'
+				); // eslint-disable-line no-console
+				warned.storeName = true;
 			}
 
-			this.byEnd[chunk.end] = chunk;
-			this.byStart[chunk.next.start] = chunk.next;
-			this.byEnd[chunk.next.end] = chunk.next;
+			options = { storeName: true };
+		}
+		const storeName = options !== undefined ? options.storeName : false;
+		const overwrite = options !== undefined ? options.overwrite : false;
+
+		if (storeName) {
+			const original = this.original.slice(start, end);
+			Object.defineProperty(this.storedNames, original, {
+				writable: true,
+				value: true,
+				enumerable: true,
+			});
 		}
 
-		if (aborted) { return true; }
-		chunk = chunk.previous;
-	} while (chunk);
+		const first = this.byStart[start];
+		const last = this.byEnd[end];
 
-	return false;
-};
+		if (first) {
+			let chunk = first;
+			while (chunk !== last) {
+				if (chunk.next !== this.byStart[chunk.end]) {
+					throw new Error('Cannot overwrite across a split point');
+				}
+				chunk = chunk.next;
+				chunk.edit('', false);
+			}
 
-MagicString.prototype.trimEnd = function trimEnd (charType) {
-	this.trimEndAborted(charType);
-	return this;
-};
-MagicString.prototype.trimStartAborted = function trimStartAborted (charType) {
-	var rx = new RegExp('^' + (charType || '\\s') + '+');
+			first.edit(content, storeName, !overwrite);
+		} else {
+			// must be inserting at the end
+			const newChunk = new Chunk(start, end, '').edit(content, storeName);
 
-	this.intro = this.intro.replace(rx, '');
-	if (this.intro.length) { return true; }
+			// TODO last chunk in the array may not be the last chunk, if it's moved...
+			last.next = newChunk;
+			newChunk.previous = last;
+		}
+		return this;
+	}
 
-	var chunk = this.firstChunk;
+	prepend(content) {
+		if (typeof content !== 'string') throw new TypeError('outro content must be a string');
 
-	do {
-		var end = chunk.end;
-		var aborted = chunk.trimStart(rx);
+		this.intro = content + this.intro;
+		return this;
+	}
 
-		if (chunk.end !== end) {
-			// special case...
-			if (chunk === this.lastChunk) { this.lastChunk = chunk.next; }
+	prependLeft(index, content) {
+		if (typeof content !== 'string') throw new TypeError('inserted content must be a string');
 
-			this.byEnd[chunk.end] = chunk;
-			this.byStart[chunk.next.start] = chunk.next;
-			this.byEnd[chunk.next.end] = chunk.next;
+		this._split(index);
+
+		const chunk = this.byEnd[index];
+
+		if (chunk) {
+			chunk.prependLeft(content);
+		} else {
+			this.intro = content + this.intro;
+		}
+		return this;
+	}
+
+	prependRight(index, content) {
+		if (typeof content !== 'string') throw new TypeError('inserted content must be a string');
+
+		this._split(index);
+
+		const chunk = this.byStart[index];
+
+		if (chunk) {
+			chunk.prependRight(content);
+		} else {
+			this.outro = content + this.outro;
+		}
+		return this;
+	}
+
+	remove(start, end) {
+		while (start < 0) start += this.original.length;
+		while (end < 0) end += this.original.length;
+
+		if (start === end) return this;
+
+		if (start < 0 || end > this.original.length) throw new Error('Character is out of bounds');
+		if (start > end) throw new Error('end must be greater than start');
+
+		this._split(start);
+		this._split(end);
+
+		let chunk = this.byStart[start];
+
+		while (chunk) {
+			chunk.intro = '';
+			chunk.outro = '';
+			chunk.edit('');
+
+			chunk = end > chunk.end ? this.byStart[chunk.end] : null;
+		}
+		return this;
+	}
+
+	lastChar() {
+		if (this.outro.length) return this.outro[this.outro.length - 1];
+		let chunk = this.lastChunk;
+		do {
+			if (chunk.outro.length) return chunk.outro[chunk.outro.length - 1];
+			if (chunk.content.length) return chunk.content[chunk.content.length - 1];
+			if (chunk.intro.length) return chunk.intro[chunk.intro.length - 1];
+		} while ((chunk = chunk.previous));
+		if (this.intro.length) return this.intro[this.intro.length - 1];
+		return '';
+	}
+
+	lastLine() {
+		let lineIndex = this.outro.lastIndexOf(n);
+		if (lineIndex !== -1) return this.outro.substr(lineIndex + 1);
+		let lineStr = this.outro;
+		let chunk = this.lastChunk;
+		do {
+			if (chunk.outro.length > 0) {
+				lineIndex = chunk.outro.lastIndexOf(n);
+				if (lineIndex !== -1) return chunk.outro.substr(lineIndex + 1) + lineStr;
+				lineStr = chunk.outro + lineStr;
+			}
+
+			if (chunk.content.length > 0) {
+				lineIndex = chunk.content.lastIndexOf(n);
+				if (lineIndex !== -1) return chunk.content.substr(lineIndex + 1) + lineStr;
+				lineStr = chunk.content + lineStr;
+			}
+
+			if (chunk.intro.length > 0) {
+				lineIndex = chunk.intro.lastIndexOf(n);
+				if (lineIndex !== -1) return chunk.intro.substr(lineIndex + 1) + lineStr;
+				lineStr = chunk.intro + lineStr;
+			}
+		} while ((chunk = chunk.previous));
+		lineIndex = this.intro.lastIndexOf(n);
+		if (lineIndex !== -1) return this.intro.substr(lineIndex + 1) + lineStr;
+		return this.intro + lineStr;
+	}
+
+	slice(start = 0, end = this.original.length) {
+		while (start < 0) start += this.original.length;
+		while (end < 0) end += this.original.length;
+
+		let result = '';
+
+		// find start chunk
+		let chunk = this.firstChunk;
+		while (chunk && (chunk.start > start || chunk.end <= start)) {
+			// found end chunk before start
+			if (chunk.start < end && chunk.end >= end) {
+				return result;
+			}
+
+			chunk = chunk.next;
 		}
 
-		if (aborted) { return true; }
-		chunk = chunk.next;
-	} while (chunk);
+		if (chunk && chunk.edited && chunk.start !== start)
+			throw new Error(`Cannot use replaced character ${start} as slice start anchor.`);
 
-	return false;
-};
+		const startChunk = chunk;
+		while (chunk) {
+			if (chunk.intro && (startChunk !== chunk || chunk.start === start)) {
+				result += chunk.intro;
+			}
 
-MagicString.prototype.trimStart = function trimStart (charType) {
-	this.trimStartAborted(charType);
-	return this;
-};
+			const containsEnd = chunk.start < end && chunk.end >= end;
+			if (containsEnd && chunk.edited && chunk.end !== end)
+				throw new Error(`Cannot use replaced character ${end} as slice end anchor.`);
 
-// @ts-check
-/** @typedef { import('estree').BaseNode} BaseNode */
+			const sliceStart = startChunk === chunk ? start - chunk.start : 0;
+			const sliceEnd = containsEnd ? chunk.content.length + end - chunk.end : chunk.content.length;
 
-/** @typedef {{
-	skip: () => void;
-	remove: () => void;
-	replace: (node: BaseNode) => void;
-}} WalkerContext */
+			result += chunk.content.slice(sliceStart, sliceEnd);
+
+			if (chunk.outro && (!containsEnd || chunk.end === end)) {
+				result += chunk.outro;
+			}
+
+			if (containsEnd) {
+				break;
+			}
+
+			chunk = chunk.next;
+		}
+
+		return result;
+	}
+
+	// TODO deprecate this? not really very useful
+	snip(start, end) {
+		const clone = this.clone();
+		clone.remove(0, start);
+		clone.remove(end, clone.original.length);
+
+		return clone;
+	}
+
+	_split(index) {
+		if (this.byStart[index] || this.byEnd[index]) return;
+
+		let chunk = this.lastSearchedChunk;
+		const searchForward = index > chunk.end;
+
+		while (chunk) {
+			if (chunk.contains(index)) return this._splitChunk(chunk, index);
+
+			chunk = searchForward ? this.byStart[chunk.end] : this.byEnd[chunk.start];
+		}
+	}
+
+	_splitChunk(chunk, index) {
+		if (chunk.edited && chunk.content.length) {
+			// zero-length edited chunks are a special case (overlapping replacements)
+			const loc = getLocator(this.original)(index);
+			throw new Error(
+				`Cannot split a chunk that has already been edited (${loc.line}:${loc.column} – "${chunk.original}")`
+			);
+		}
+
+		const newChunk = chunk.split(index);
+
+		this.byEnd[index] = chunk;
+		this.byStart[index] = newChunk;
+		this.byEnd[newChunk.end] = newChunk;
+
+		if (chunk === this.lastChunk) this.lastChunk = newChunk;
+
+		this.lastSearchedChunk = chunk;
+		return true;
+	}
+
+	toString() {
+		let str = this.intro;
+
+		let chunk = this.firstChunk;
+		while (chunk) {
+			str += chunk.toString();
+			chunk = chunk.next;
+		}
+
+		return str + this.outro;
+	}
+
+	isEmpty() {
+		let chunk = this.firstChunk;
+		do {
+			if (
+				(chunk.intro.length && chunk.intro.trim()) ||
+				(chunk.content.length && chunk.content.trim()) ||
+				(chunk.outro.length && chunk.outro.trim())
+			)
+				return false;
+		} while ((chunk = chunk.next));
+		return true;
+	}
+
+	length() {
+		let chunk = this.firstChunk;
+		let length = 0;
+		do {
+			length += chunk.intro.length + chunk.content.length + chunk.outro.length;
+		} while ((chunk = chunk.next));
+		return length;
+	}
+
+	trimLines() {
+		return this.trim('[\\r\\n]');
+	}
+
+	trim(charType) {
+		return this.trimStart(charType).trimEnd(charType);
+	}
+
+	trimEndAborted(charType) {
+		const rx = new RegExp((charType || '\\s') + '+$');
+
+		this.outro = this.outro.replace(rx, '');
+		if (this.outro.length) return true;
+
+		let chunk = this.lastChunk;
+
+		do {
+			const end = chunk.end;
+			const aborted = chunk.trimEnd(rx);
+
+			// if chunk was trimmed, we have a new lastChunk
+			if (chunk.end !== end) {
+				if (this.lastChunk === chunk) {
+					this.lastChunk = chunk.next;
+				}
+
+				this.byEnd[chunk.end] = chunk;
+				this.byStart[chunk.next.start] = chunk.next;
+				this.byEnd[chunk.next.end] = chunk.next;
+			}
+
+			if (aborted) return true;
+			chunk = chunk.previous;
+		} while (chunk);
+
+		return false;
+	}
+
+	trimEnd(charType) {
+		this.trimEndAborted(charType);
+		return this;
+	}
+	trimStartAborted(charType) {
+		const rx = new RegExp('^' + (charType || '\\s') + '+');
+
+		this.intro = this.intro.replace(rx, '');
+		if (this.intro.length) return true;
+
+		let chunk = this.firstChunk;
+
+		do {
+			const end = chunk.end;
+			const aborted = chunk.trimStart(rx);
+
+			if (chunk.end !== end) {
+				// special case...
+				if (chunk === this.lastChunk) this.lastChunk = chunk.next;
+
+				this.byEnd[chunk.end] = chunk;
+				this.byStart[chunk.next.start] = chunk.next;
+				this.byEnd[chunk.next.end] = chunk.next;
+			}
+
+			if (aborted) return true;
+			chunk = chunk.next;
+		} while (chunk);
+
+		return false;
+	}
+
+	trimStart(charType) {
+		this.trimStartAborted(charType);
+		return this;
+	}
+
+	hasChanged() {
+		return this.original !== this.toString();
+	}
+
+	_replaceRegexp(searchValue, replacement) {
+		function getReplacement(match, str) {
+			if (typeof replacement === 'string') {
+				return replacement.replace(/\$(\$|&|\d+)/g, (_, i) => {
+					// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace#specifying_a_string_as_a_parameter
+					if (i === '$') return '$';
+					if (i === '&') return match[0];
+					const num = +i;
+					if (num < match.length) return match[+i];
+					return `$${i}`;
+				});
+			} else {
+				return replacement(...match, match.index, str, match.groups);
+			}
+		}
+		function matchAll(re, str) {
+			let match;
+			const matches = [];
+			while ((match = re.exec(str))) {
+				matches.push(match);
+			}
+			return matches;
+		}
+		if (searchValue.global) {
+			const matches = matchAll(searchValue, this.original);
+			matches.forEach((match) => {
+				if (match.index != null)
+					this.overwrite(
+						match.index,
+						match.index + match[0].length,
+						getReplacement(match, this.original)
+					);
+			});
+		} else {
+			const match = this.original.match(searchValue);
+			if (match && match.index != null)
+				this.overwrite(
+					match.index,
+					match.index + match[0].length,
+					getReplacement(match, this.original)
+				);
+		}
+		return this;
+	}
+
+	_replaceString(string, replacement) {
+		const { original } = this;
+		const index = original.indexOf(string);
+
+		if (index !== -1) {
+			this.overwrite(index, index + string.length, replacement);
+		}
+
+		return this;
+	}
+
+	replace(searchValue, replacement) {
+		if (typeof searchValue === 'string') {
+			return this._replaceString(searchValue, replacement);
+		}
+
+		return this._replaceRegexp(searchValue, replacement);
+	}
+
+	_replaceAllString(string, replacement) {
+		const { original } = this;
+		const stringLength = string.length;
+		for (
+			let index = original.indexOf(string);
+			index !== -1;
+			index = original.indexOf(string, index + stringLength)
+		) {
+			this.overwrite(index, index + stringLength, replacement);
+		}
+
+		return this;
+	}
+
+	replaceAll(searchValue, replacement) {
+		if (typeof searchValue === 'string') {
+			return this._replaceAllString(searchValue, replacement);
+		}
+
+		if (!searchValue.global) {
+			throw new TypeError(
+				'MagicString.prototype.replaceAll called with a non-global RegExp argument'
+			);
+		}
+
+		return this._replaceRegexp(searchValue, replacement);
+	}
+}
+
+/**
+ * @typedef { import('estree').Node} Node
+ * @typedef {{
+ *   skip: () => void;
+ *   remove: () => void;
+ *   replace: (node: Node) => void;
+ * }} WalkerContext
+ */
 
 class WalkerBase {
 	constructor() {
@@ -2689,7 +3411,7 @@ class WalkerBase {
 		/** @type {boolean} */
 		this.should_remove = false;
 
-		/** @type {BaseNode | null} */
+		/** @type {Node | null} */
 		this.replacement = null;
 
 		/** @type {WalkerContext} */
@@ -2701,32 +3423,32 @@ class WalkerBase {
 	}
 
 	/**
-	 *
-	 * @param {any} parent
-	 * @param {string} prop
-	 * @param {number} index
-	 * @param {BaseNode} node
+	 * @template {Node} Parent
+	 * @param {Parent | null | undefined} parent
+	 * @param {keyof Parent | null | undefined} prop
+	 * @param {number | null | undefined} index
+	 * @param {Node} node
 	 */
 	replace(parent, prop, index, node) {
-		if (parent) {
-			if (index !== null) {
-				parent[prop][index] = node;
+		if (parent && prop) {
+			if (index != null) {
+				/** @type {Array<Node>} */ (parent[prop])[index] = node;
 			} else {
-				parent[prop] = node;
+				/** @type {Node} */ (parent[prop]) = node;
 			}
 		}
 	}
 
 	/**
-	 *
-	 * @param {any} parent
-	 * @param {string} prop
-	 * @param {number} index
+	 * @template {Node} Parent
+	 * @param {Parent | null | undefined} parent
+	 * @param {keyof Parent | null | undefined} prop
+	 * @param {number | null | undefined} index
 	 */
 	remove(parent, prop, index) {
-		if (parent) {
-			if (index !== null) {
-				parent[prop].splice(index, 1);
+		if (parent && prop) {
+			if (index !== null && index !== undefined) {
+				/** @type {Array<Node>} */ (parent[prop]).splice(index, 1);
 			} else {
 				delete parent[prop];
 			}
@@ -2734,42 +3456,57 @@ class WalkerBase {
 	}
 }
 
-// @ts-check
-
-/** @typedef { import('estree').BaseNode} BaseNode */
-/** @typedef { import('./walker.js').WalkerContext} WalkerContext */
-
-/** @typedef {(
+/**
+ * @typedef { import('estree').Node} Node
+ * @typedef { import('./walker.js').WalkerContext} WalkerContext
+ * @typedef {(
  *    this: WalkerContext,
- *    node: BaseNode,
- *    parent: BaseNode,
- *    key: string,
- *    index: number
- * ) => void} SyncHandler */
+ *    node: Node,
+ *    parent: Node | null,
+ *    key: string | number | symbol | null | undefined,
+ *    index: number | null | undefined
+ * ) => void} SyncHandler
+ */
 
 class SyncWalker extends WalkerBase {
 	/**
 	 *
-	 * @param {SyncHandler} enter
-	 * @param {SyncHandler} leave
+	 * @param {SyncHandler} [enter]
+	 * @param {SyncHandler} [leave]
 	 */
 	constructor(enter, leave) {
 		super();
 
-		/** @type {SyncHandler} */
+		/** @type {boolean} */
+		this.should_skip = false;
+
+		/** @type {boolean} */
+		this.should_remove = false;
+
+		/** @type {Node | null} */
+		this.replacement = null;
+
+		/** @type {WalkerContext} */
+		this.context = {
+			skip: () => (this.should_skip = true),
+			remove: () => (this.should_remove = true),
+			replace: (node) => (this.replacement = node)
+		};
+
+		/** @type {SyncHandler | undefined} */
 		this.enter = enter;
 
-		/** @type {SyncHandler} */
+		/** @type {SyncHandler | undefined} */
 		this.leave = leave;
 	}
 
 	/**
-	 *
-	 * @param {BaseNode} node
-	 * @param {BaseNode} parent
-	 * @param {string} [prop]
-	 * @param {number} [index]
-	 * @returns {BaseNode}
+	 * @template {Node} Parent
+	 * @param {Node} node
+	 * @param {Parent | null} parent
+	 * @param {keyof Parent} [prop]
+	 * @param {number | null} [index]
+	 * @returns {Node | null}
 	 */
 	visit(node, parent, prop, index) {
 		if (node) {
@@ -2803,22 +3540,28 @@ class SyncWalker extends WalkerBase {
 				if (removed) return null;
 			}
 
-			for (const key in node) {
+			/** @type {keyof Node} */
+			let key;
+
+			for (key in node) {
+				/** @type {unknown} */
 				const value = node[key];
 
-				if (typeof value !== "object") {
-					continue;
-				} else if (Array.isArray(value)) {
-					for (let i = 0; i < value.length; i += 1) {
-						if (value[i] !== null && typeof value[i].type === 'string') {
-							if (!this.visit(value[i], node, key, i)) {
-								// removed
-								i--;
+				if (value && typeof value === 'object') {
+					if (Array.isArray(value)) {
+						const nodes = /** @type {Array<unknown>} */ (value);
+						for (let i = 0; i < nodes.length; i += 1) {
+							const item = nodes[i];
+							if (isNode$1(item)) {
+								if (!this.visit(item, node, key, i)) {
+									// removed
+									i--;
+								}
 							}
 						}
+					} else if (isNode$1(value)) {
+						this.visit(value, node, key, null);
 					}
-				} else if (value !== null && typeof value.type === "string") {
-					this.visit(value, node, key, null);
 				}
 			}
 
@@ -2852,20 +3595,31 @@ class SyncWalker extends WalkerBase {
 	}
 }
 
-// @ts-check
-
-/** @typedef { import('estree').BaseNode} BaseNode */
-/** @typedef { import('./sync.js').SyncHandler} SyncHandler */
-/** @typedef { import('./async.js').AsyncHandler} AsyncHandler */
+/**
+ * Ducktype a node.
+ *
+ * @param {unknown} value
+ * @returns {value is Node}
+ */
+function isNode$1(value) {
+	return (
+		value !== null && typeof value === 'object' && 'type' in value && typeof value.type === 'string'
+	);
+}
 
 /**
- *
- * @param {BaseNode} ast
+ * @typedef {import('estree').Node} Node
+ * @typedef {import('./sync.js').SyncHandler} SyncHandler
+ * @typedef {import('./async.js').AsyncHandler} AsyncHandler
+ */
+
+/**
+ * @param {Node} ast
  * @param {{
  *   enter?: SyncHandler
  *   leave?: SyncHandler
  * }} walker
- * @returns {BaseNode}
+ * @returns {Node | null}
  */
 function walk$1(ast, { enter, leave }) {
 	const instance = new SyncWalker(enter, leave);
@@ -3555,7 +4309,10 @@ class Dep {
         if (Dep.target) {
             Dep.target.addDep(this);
             if (process.env.NODE_ENV !== 'production' && info && Dep.target.onTrack) {
-                Dep.target.onTrack(Object.assign({ effect: Dep.target }, info));
+                Dep.target.onTrack({
+                    effect: Dep.target,
+                    ...info
+                });
             }
         }
     }
@@ -3572,7 +4329,10 @@ class Dep {
             const sub = subs[i];
             if (process.env.NODE_ENV !== 'production' && info) {
                 sub.onTrigger &&
-                    sub.onTrigger(Object.assign({ effect: subs[i] }, info));
+                    sub.onTrigger({
+                        effect: subs[i],
+                        ...info
+                    });
             }
             sub.update();
         }
@@ -6487,7 +7247,11 @@ var style = {
     genData: genData$1
 };
 
-var he$1 = {exports: {}};
+var heExports = {};
+var he$1 = {
+  get exports(){ return heExports; },
+  set exports(v){ heExports = v; },
+};
 
 /*! https://mths.be/he v1.2.0 by @mathias | MIT license */
 
@@ -6828,9 +7592,9 @@ var he$1 = {exports: {}};
 		}
 
 	}(commonjsGlobal));
-} (he$1, he$1.exports));
+} (he$1, heExports));
 
-var he = he$1.exports;
+var he = heExports;
 
 /**
  * Cross-platform code generation for component v-model
@@ -8010,7 +8774,10 @@ function prefixIdentifiers(source, isFunctional = false, isTS = false, babelOpti
         ...(isTS ? ['typescript'] : []),
         ...((babelOptions === null || babelOptions === void 0 ? void 0 : babelOptions.plugins) || [])
     ];
-    const ast = parser$1.parseExpression(source, Object.assign(Object.assign({}, babelOptions), { plugins }));
+    const ast = parser$1.parseExpression(source, {
+        ...babelOptions,
+        plugins
+    });
     const isScriptSetup = bindings && bindings.__isScriptSetup !== false;
     walkIdentifiers(ast, (ident, parent) => {
         const { name } = ident;
@@ -8328,9 +9095,13 @@ function compileScript(sfc, options = { id: '' }) {
                 content += genNormalScriptCssVarsCode(cssVars, bindings, scopeId, isProd);
                 content += `\nexport default ${DEFAULT_VAR}`;
             }
-            return Object.assign(Object.assign({}, script), { content,
+            return {
+                ...script,
+                content,
                 map,
-                bindings, scriptAst: scriptAst.body });
+                bindings,
+                scriptAst: scriptAst.body
+            };
         }
         catch (e) {
             // silently fallback if parse fails since user may be using custom
@@ -9051,7 +9822,10 @@ function compileScript(sfc, options = { id: '' }) {
         }
     }
     // 10. generate return statement
-    const allBindings = Object.assign(Object.assign({}, scriptBindings), setupBindings);
+    const allBindings = {
+        ...scriptBindings,
+        ...setupBindings
+    };
     for (const key in userImports) {
         if (!userImports[key].isType && userImports[key].isUsedInTemplate) {
             allBindings[key] = true;
@@ -9117,13 +9891,21 @@ function compileScript(sfc, options = { id: '' }) {
             .join(', ')} } from 'vue'\n`);
     }
     s.trim();
-    return Object.assign(Object.assign({}, scriptSetup), { bindings: bindingMetadata, imports: userImports, content: s.toString(), map: genSourceMap
+    return {
+        ...scriptSetup,
+        bindings: bindingMetadata,
+        imports: userImports,
+        content: s.toString(),
+        map: genSourceMap
             ? s.generateMap({
                 source: filename,
                 hires: true,
                 includeContent: true
             })
-            : undefined, scriptAst: scriptAst === null || scriptAst === void 0 ? void 0 : scriptAst.body, scriptSetupAst: scriptSetupAst === null || scriptSetupAst === void 0 ? void 0 : scriptSetupAst.body });
+            : undefined,
+        scriptAst: scriptAst === null || scriptAst === void 0 ? void 0 : scriptAst.body,
+        scriptSetupAst: scriptSetupAst === null || scriptSetupAst === void 0 ? void 0 : scriptSetupAst.body
+    };
 }
 function registerBinding(bindings, node, type) {
     bindings[node.name] = type;
@@ -9544,7 +10326,8 @@ function getObjectOrArrayExpressionKeys(value) {
     }
     return [];
 }
-const templateUsageCheckCache = new lruCache(512);
+const cacheOptions$1 = { ttl: 512, ttlAutopurge: false };
+const templateUsageCheckCache = new LRU(cacheOptions$1);
 function resolveTemplateUsageCheckString(sfc, isTS) {
     const { content } = sfc.template;
     const cached = templateUsageCheckCache.get(content);
@@ -9552,7 +10335,9 @@ function resolveTemplateUsageCheckString(sfc, isTS) {
         return cached;
     }
     let code = '';
-    parseHTML(content, Object.assign(Object.assign({}, baseOptions), { start(tag, attrs) {
+    parseHTML(content, {
+        ...baseOptions,
+        start(tag, attrs) {
             if (!isBuiltInTag(tag) && !isReservedTag(tag)) {
                 code += `,${camelize(tag)},${capitalize(camelize(tag))}`;
             }
@@ -9580,7 +10365,8 @@ function resolveTemplateUsageCheckString(sfc, isTS) {
             if (res) {
                 code += `,${processExp(res.expression, isTS)}`;
             }
-        } }));
+        }
+    });
     code += ';';
     templateUsageCheckCache.set(content, code);
     return code;
@@ -9651,7 +10437,8 @@ function hmrShouldReload(prevImports, next) {
     return false;
 }
 
-const cache = new lruCache(100);
+const cacheOptions = { ttl: 100, ttlAutopurge: false };
+const cache = new LRU(cacheOptions);
 const splitRE = /\r?\n/g;
 const emptyRE = /^(?:\/\/)?\s*$/;
 function parse(options) {
@@ -9886,13 +10673,21 @@ function transform(node, transformAssetUrlsOptions) {
     }
 }
 
-var consolidate$2 = {exports: {}};
+var consolidateExports$1 = {};
+var consolidate$2 = {
+  get exports(){ return consolidateExports$1; },
+  set exports(v){ consolidateExports$1 = v; },
+};
 
 function commonjsRequire(path) {
 	throw new Error('Could not dynamically require "' + path + '". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.');
 }
 
-var consolidate$1 = {exports: {}};
+var consolidateExports = {};
+var consolidate$1 = {
+  get exports(){ return consolidateExports; },
+  set exports(v){ consolidateExports = v; },
+};
 
 (function (module, exports) {
 	/*
@@ -11686,13 +12481,13 @@ var consolidate$1 = {exports: {}};
 	 * expose the instance of the engine
 	 */
 	exports.requires = requires;
-} (consolidate$1, consolidate$1.exports));
+} (consolidate$1, consolidateExports));
 
 (function (module) {
-	module.exports = consolidate$1.exports;
+	module.exports = consolidateExports;
 } (consolidate$2));
 
-var consolidate = /*@__PURE__*/getDefaultExportFromCjs(consolidate$2.exports);
+var consolidate = /*@__PURE__*/getDefaultExportFromCjs(consolidateExports$1);
 
 let isStaticKey;
 let isPlatformReservedTag$1;
@@ -13355,21 +14150,49 @@ const trimPlugin = () => {
 };
 trimPlugin.postcss = true;
 
-var dist = {exports: {}};
+var distExports = {};
+var dist = {
+  get exports(){ return distExports; },
+  set exports(v){ distExports = v; },
+};
 
-var processor = {exports: {}};
+var processorExports = {};
+var processor = {
+  get exports(){ return processorExports; },
+  set exports(v){ processorExports = v; },
+};
 
-var parser = {exports: {}};
+var parserExports = {};
+var parser = {
+  get exports(){ return parserExports; },
+  set exports(v){ parserExports = v; },
+};
 
-var root$1 = {exports: {}};
+var rootExports = {};
+var root$1 = {
+  get exports(){ return rootExports; },
+  set exports(v){ rootExports = v; },
+};
 
-var container = {exports: {}};
+var containerExports = {};
+var container = {
+  get exports(){ return containerExports; },
+  set exports(v){ containerExports = v; },
+};
 
-var node$1 = {exports: {}};
+var nodeExports = {};
+var node$1 = {
+  get exports(){ return nodeExports; },
+  set exports(v){ nodeExports = v; },
+};
 
 var util = {};
 
-var unesc = {exports: {}};
+var unescExports = {};
+var unesc = {
+  get exports(){ return unescExports; },
+  set exports(v){ unescExports = v; },
+};
 
 (function (module, exports) {
 
@@ -13464,9 +14287,13 @@ var unesc = {exports: {}};
 	}
 
 	module.exports = exports.default;
-} (unesc, unesc.exports));
+} (unesc, unescExports));
 
-var getProp = {exports: {}};
+var getPropExports = {};
+var getProp = {
+  get exports(){ return getPropExports; },
+  set exports(v){ getPropExports = v; },
+};
 
 (function (module, exports) {
 
@@ -13492,9 +14319,13 @@ var getProp = {exports: {}};
 	}
 
 	module.exports = exports.default;
-} (getProp, getProp.exports));
+} (getProp, getPropExports));
 
-var ensureObject = {exports: {}};
+var ensureObjectExports = {};
+var ensureObject = {
+  get exports(){ return ensureObjectExports; },
+  set exports(v){ ensureObjectExports = v; },
+};
 
 (function (module, exports) {
 
@@ -13518,9 +14349,13 @@ var ensureObject = {exports: {}};
 	}
 
 	module.exports = exports.default;
-} (ensureObject, ensureObject.exports));
+} (ensureObject, ensureObjectExports));
 
-var stripComments = {exports: {}};
+var stripCommentsExports = {};
+var stripComments = {
+  get exports(){ return stripCommentsExports; },
+  set exports(v){ stripCommentsExports = v; },
+};
 
 (function (module, exports) {
 
@@ -13549,24 +14384,24 @@ var stripComments = {exports: {}};
 	}
 
 	module.exports = exports.default;
-} (stripComments, stripComments.exports));
+} (stripComments, stripCommentsExports));
 
 util.__esModule = true;
 util.stripComments = util.ensureObject = util.getProp = util.unesc = void 0;
 
-var _unesc = _interopRequireDefault$1(unesc.exports);
+var _unesc = _interopRequireDefault$1(unescExports);
 
 util.unesc = _unesc["default"];
 
-var _getProp = _interopRequireDefault$1(getProp.exports);
+var _getProp = _interopRequireDefault$1(getPropExports);
 
 util.getProp = _getProp["default"];
 
-var _ensureObject = _interopRequireDefault$1(ensureObject.exports);
+var _ensureObject = _interopRequireDefault$1(ensureObjectExports);
 
 util.ensureObject = _ensureObject["default"];
 
-var _stripComments = _interopRequireDefault$1(stripComments.exports);
+var _stripComments = _interopRequireDefault$1(stripCommentsExports);
 
 util.stripComments = _stripComments["default"];
 
@@ -13811,7 +14646,7 @@ function _interopRequireDefault$1(obj) { return obj && obj.__esModule ? obj : { 
 
 	exports["default"] = Node;
 	module.exports = exports.default;
-} (node$1, node$1.exports));
+} (node$1, nodeExports));
 
 var types = {};
 
@@ -13847,7 +14682,7 @@ types.UNIVERSAL = UNIVERSAL;
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	var types$1 = _interopRequireWildcard(types);
 
@@ -14237,14 +15072,14 @@ types.UNIVERSAL = UNIVERSAL;
 
 	exports["default"] = Container;
 	module.exports = exports.default;
-} (container, container.exports));
+} (container, containerExports));
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _container = _interopRequireDefault(container.exports);
+	var _container = _interopRequireDefault(containerExports);
 
 	var _types = types;
 
@@ -14299,16 +15134,20 @@ types.UNIVERSAL = UNIVERSAL;
 
 	exports["default"] = Root;
 	module.exports = exports.default;
-} (root$1, root$1.exports));
+} (root$1, rootExports));
 
-var selector$1 = {exports: {}};
+var selectorExports = {};
+var selector$1 = {
+  get exports(){ return selectorExports; },
+  set exports(v){ selectorExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _container = _interopRequireDefault(container.exports);
+	var _container = _interopRequireDefault(containerExports);
 
 	var _types = types;
 
@@ -14334,9 +15173,13 @@ var selector$1 = {exports: {}};
 
 	exports["default"] = Selector;
 	module.exports = exports.default;
-} (selector$1, selector$1.exports));
+} (selector$1, selectorExports));
 
-var className$1 = {exports: {}};
+var classNameExports = {};
+var className$1 = {
+  get exports(){ return classNameExports; },
+  set exports(v){ classNameExports = v; },
+};
 
 /*! https://mths.be/cssesc v3.0.0 by @mathias */
 
@@ -14456,7 +15299,7 @@ var cssesc_1 = cssesc;
 
 	var _util = util;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	var _types = types;
 
@@ -14516,16 +15359,20 @@ var cssesc_1 = cssesc;
 
 	exports["default"] = ClassName;
 	module.exports = exports.default;
-} (className$1, className$1.exports));
+} (className$1, classNameExports));
 
-var comment$2 = {exports: {}};
+var commentExports = {};
+var comment$2 = {
+  get exports(){ return commentExports; },
+  set exports(v){ commentExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	var _types = types;
 
@@ -14551,16 +15398,20 @@ var comment$2 = {exports: {}};
 
 	exports["default"] = Comment;
 	module.exports = exports.default;
-} (comment$2, comment$2.exports));
+} (comment$2, commentExports));
 
-var id$1 = {exports: {}};
+var idExports = {};
+var id$1 = {
+  get exports(){ return idExports; },
+  set exports(v){ idExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	var _types = types;
 
@@ -14592,11 +15443,19 @@ var id$1 = {exports: {}};
 
 	exports["default"] = ID;
 	module.exports = exports.default;
-} (id$1, id$1.exports));
+} (id$1, idExports));
 
-var tag$1 = {exports: {}};
+var tagExports = {};
+var tag$1 = {
+  get exports(){ return tagExports; },
+  set exports(v){ tagExports = v; },
+};
 
-var namespace = {exports: {}};
+var namespaceExports = {};
+var namespace = {
+  get exports(){ return namespaceExports; },
+  set exports(v){ namespaceExports = v; },
+};
 
 (function (module, exports) {
 
@@ -14607,7 +15466,7 @@ var namespace = {exports: {}};
 
 	var _util = util;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
@@ -14698,14 +15557,14 @@ var namespace = {exports: {}};
 
 	exports["default"] = Namespace;
 	module.exports = exports.default;
-} (namespace, namespace.exports));
+} (namespace, namespaceExports));
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _namespace = _interopRequireDefault(namespace.exports);
+	var _namespace = _interopRequireDefault(namespaceExports);
 
 	var _types = types;
 
@@ -14731,16 +15590,20 @@ var namespace = {exports: {}};
 
 	exports["default"] = Tag;
 	module.exports = exports.default;
-} (tag$1, tag$1.exports));
+} (tag$1, tagExports));
 
-var string$1 = {exports: {}};
+var stringExports = {};
+var string$1 = {
+  get exports(){ return stringExports; },
+  set exports(v){ stringExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	var _types = types;
 
@@ -14766,16 +15629,20 @@ var string$1 = {exports: {}};
 
 	exports["default"] = String;
 	module.exports = exports.default;
-} (string$1, string$1.exports));
+} (string$1, stringExports));
 
-var pseudo$1 = {exports: {}};
+var pseudoExports = {};
+var pseudo$1 = {
+  get exports(){ return pseudoExports; },
+  set exports(v){ pseudoExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _container = _interopRequireDefault(container.exports);
+	var _container = _interopRequireDefault(containerExports);
 
 	var _types = types;
 
@@ -14808,7 +15675,7 @@ var pseudo$1 = {exports: {}};
 
 	exports["default"] = Pseudo;
 	module.exports = exports.default;
-} (pseudo$1, pseudo$1.exports));
+} (pseudo$1, pseudoExports));
 
 var attribute$1 = {};
 
@@ -14826,9 +15693,9 @@ var node = require$$2__default["default"].deprecate;
 
 	var _cssesc = _interopRequireDefault(cssesc_1);
 
-	var _unesc = _interopRequireDefault(unesc.exports);
+	var _unesc = _interopRequireDefault(unescExports);
 
-	var _namespace = _interopRequireDefault(namespace.exports);
+	var _namespace = _interopRequireDefault(namespaceExports);
 
 	var _types = types;
 
@@ -15261,7 +16128,8 @@ var node = require$$2__default["default"].deprecate;
 	    key: "value",
 	    get: function get() {
 	      return this._value;
-	    }
+	    },
+	    set:
 	    /**
 	     * Before 3.0, the value had to be set to an escaped value including any wrapped
 	     * quote marks. In 3.0, the semantics of `Attribute.value` changed so that the value
@@ -15274,8 +16142,7 @@ var node = require$$2__default["default"].deprecate;
 	     * Instead, you should call `attr.setValue(newValue, opts)` and pass options that describe
 	     * how the new value is quoted.
 	     */
-	    ,
-	    set: function set(v) {
+	    function set(v) {
 	      if (this._constructed) {
 	        var _unescapeValue2 = unescapeValue(v),
 	            deprecatedUsage = _unescapeValue2.deprecatedUsage,
@@ -15297,6 +16164,31 @@ var node = require$$2__default["default"].deprecate;
 	      } else {
 	        this._value = v;
 	      }
+	    }
+	  }, {
+	    key: "insensitive",
+	    get: function get() {
+	      return this._insensitive;
+	    }
+	    /**
+	     * Set the case insensitive flag.
+	     * If the case insensitive flag changes, the raw (escaped) value at `attr.raws.insensitiveFlag`
+	     * of the attribute is updated accordingly.
+	     *
+	     * @param {true | false} insensitive true if the attribute should match case-insensitively.
+	     */
+	    ,
+	    set: function set(insensitive) {
+	      if (!insensitive) {
+	        this._insensitive = false; // "i" and "I" can be used in "this.raws.insensitiveFlag" to store the original notation.
+	        // When setting `attr.insensitive = false` both should be erased to ensure correct serialization.
+
+	        if (this.raws && (this.raws.insensitiveFlag === 'I' || this.raws.insensitiveFlag === 'i')) {
+	          this.raws.insensitiveFlag = undefined;
+	        }
+	      }
+
+	      this._insensitive = insensitive;
 	    }
 	  }, {
 	    key: "attribute",
@@ -15335,14 +16227,18 @@ var node = require$$2__default["default"].deprecate;
 	}
 } (attribute$1));
 
-var universal$1 = {exports: {}};
+var universalExports = {};
+var universal$1 = {
+  get exports(){ return universalExports; },
+  set exports(v){ universalExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _namespace = _interopRequireDefault(namespace.exports);
+	var _namespace = _interopRequireDefault(namespaceExports);
 
 	var _types = types;
 
@@ -15369,16 +16265,20 @@ var universal$1 = {exports: {}};
 
 	exports["default"] = Universal;
 	module.exports = exports.default;
-} (universal$1, universal$1.exports));
+} (universal$1, universalExports));
 
-var combinator$2 = {exports: {}};
+var combinatorExports = {};
+var combinator$2 = {
+  get exports(){ return combinatorExports; },
+  set exports(v){ combinatorExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	var _types = types;
 
@@ -15404,16 +16304,20 @@ var combinator$2 = {exports: {}};
 
 	exports["default"] = Combinator;
 	module.exports = exports.default;
-} (combinator$2, combinator$2.exports));
+} (combinator$2, combinatorExports));
 
-var nesting$1 = {exports: {}};
+var nestingExports = {};
+var nesting$1 = {
+  get exports(){ return nestingExports; },
+  set exports(v){ nestingExports = v; },
+};
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _node = _interopRequireDefault(node$1.exports);
+	var _node = _interopRequireDefault(nodeExports);
 
 	var _types = types;
 
@@ -15440,9 +16344,13 @@ var nesting$1 = {exports: {}};
 
 	exports["default"] = Nesting;
 	module.exports = exports.default;
-} (nesting$1, nesting$1.exports));
+} (nesting$1, nestingExports));
 
-var sortAscending = {exports: {}};
+var sortAscendingExports = {};
+var sortAscending = {
+  get exports(){ return sortAscendingExports; },
+  set exports(v){ sortAscendingExports = v; },
+};
 
 (function (module, exports) {
 
@@ -15455,7 +16363,7 @@ var sortAscending = {exports: {}};
 	  });
 	}
 	module.exports = exports.default;
-} (sortAscending, sortAscending.exports));
+} (sortAscending, sortAscendingExports));
 
 var tokenize = {};
 
@@ -15832,31 +16740,31 @@ tokenTypes.combinator = combinator$1;
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _root = _interopRequireDefault(root$1.exports);
+	var _root = _interopRequireDefault(rootExports);
 
-	var _selector = _interopRequireDefault(selector$1.exports);
+	var _selector = _interopRequireDefault(selectorExports);
 
-	var _className = _interopRequireDefault(className$1.exports);
+	var _className = _interopRequireDefault(classNameExports);
 
-	var _comment = _interopRequireDefault(comment$2.exports);
+	var _comment = _interopRequireDefault(commentExports);
 
-	var _id = _interopRequireDefault(id$1.exports);
+	var _id = _interopRequireDefault(idExports);
 
-	var _tag = _interopRequireDefault(tag$1.exports);
+	var _tag = _interopRequireDefault(tagExports);
 
-	var _string = _interopRequireDefault(string$1.exports);
+	var _string = _interopRequireDefault(stringExports);
 
-	var _pseudo = _interopRequireDefault(pseudo$1.exports);
+	var _pseudo = _interopRequireDefault(pseudoExports);
 
 	var _attribute = _interopRequireWildcard(attribute$1);
 
-	var _universal = _interopRequireDefault(universal$1.exports);
+	var _universal = _interopRequireDefault(universalExports);
 
-	var _combinator = _interopRequireDefault(combinator$2.exports);
+	var _combinator = _interopRequireDefault(combinatorExports);
 
-	var _nesting = _interopRequireDefault(nesting$1.exports);
+	var _nesting = _interopRequireDefault(nestingExports);
 
-	var _sortAscending = _interopRequireDefault(sortAscending.exports);
+	var _sortAscending = _interopRequireDefault(sortAscendingExports);
 
 	var _tokenize = _interopRequireWildcard(tokenize);
 
@@ -16173,7 +17081,7 @@ tokenTypes.combinator = combinator$1;
 	            }
 
 	            lastAdded = 'attribute';
-	          } else if (!node.value && node.value !== "" || lastAdded === "value" && !spaceAfterMeaningfulToken) {
+	          } else if (!node.value && node.value !== "" || lastAdded === "value" && !(spaceAfterMeaningfulToken || node.quoteMark)) {
 	            var _unescaped = (0, _util.unesc)(content);
 
 	            var _oldRawValue = (0, _util.getProp)(node, 'raws', 'value') || '';
@@ -16361,8 +17269,8 @@ tokenTypes.combinator = combinator$1;
 	    return nodes;
 	  }
 	  /**
-	   * 
-	   * @param {*} nodes 
+	   *
+	   * @param {*} nodes
 	   */
 	  ;
 
@@ -17069,14 +17977,14 @@ tokenTypes.combinator = combinator$1;
 
 	exports["default"] = Parser;
 	module.exports = exports.default;
-} (parser, parser.exports));
+} (parser, parserExports));
 
 (function (module, exports) {
 
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _parser = _interopRequireDefault(parser.exports);
+	var _parser = _interopRequireDefault(parserExports);
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
@@ -17277,7 +18185,7 @@ tokenTypes.combinator = combinator$1;
 
 	exports["default"] = Processor;
 	module.exports = exports.default;
-} (processor, processor.exports));
+} (processor, processorExports));
 
 var selectors = {};
 
@@ -17288,27 +18196,27 @@ constructors.universal = constructors.tag = constructors.string = constructors.s
 
 var _attribute = _interopRequireDefault(attribute$1);
 
-var _className = _interopRequireDefault(className$1.exports);
+var _className = _interopRequireDefault(classNameExports);
 
-var _combinator = _interopRequireDefault(combinator$2.exports);
+var _combinator = _interopRequireDefault(combinatorExports);
 
-var _comment = _interopRequireDefault(comment$2.exports);
+var _comment = _interopRequireDefault(commentExports);
 
-var _id = _interopRequireDefault(id$1.exports);
+var _id = _interopRequireDefault(idExports);
 
-var _nesting = _interopRequireDefault(nesting$1.exports);
+var _nesting = _interopRequireDefault(nestingExports);
 
-var _pseudo = _interopRequireDefault(pseudo$1.exports);
+var _pseudo = _interopRequireDefault(pseudoExports);
 
-var _root = _interopRequireDefault(root$1.exports);
+var _root = _interopRequireDefault(rootExports);
 
-var _selector = _interopRequireDefault(selector$1.exports);
+var _selector = _interopRequireDefault(selectorExports);
 
-var _string = _interopRequireDefault(string$1.exports);
+var _string = _interopRequireDefault(stringExports);
 
-var _tag = _interopRequireDefault(tag$1.exports);
+var _tag = _interopRequireDefault(tagExports);
 
-var _universal = _interopRequireDefault(universal$1.exports);
+var _universal = _interopRequireDefault(universalExports);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
@@ -17483,7 +18391,7 @@ function isNamespace(node) {
 	exports.__esModule = true;
 	exports["default"] = void 0;
 
-	var _processor = _interopRequireDefault(processor.exports);
+	var _processor = _interopRequireDefault(processorExports);
 
 	var selectors$1 = _interopRequireWildcard(selectors);
 
@@ -17502,9 +18410,9 @@ function isNamespace(node) {
 	var _default = parser;
 	exports["default"] = _default;
 	module.exports = exports.default;
-} (dist, dist.exports));
+} (dist, distExports));
 
-var selectorParser = /*@__PURE__*/getDefaultExportFromCjs(dist.exports);
+var selectorParser = /*@__PURE__*/getDefaultExportFromCjs(distExports);
 
 const animationNameRE = /^(-\w+-)?animation-name$/;
 const animationRE = /^(-\w+-)?animation$/;
@@ -17749,7 +18657,13 @@ function merge(oldMap, newMap) {
 // .scss/.sass processor
 const scss = (source, map, options) => {
     const nodeSass = require('sass');
-    const finalOptions = Object.assign(Object.assign({}, options), { data: getSource(source, options.filename, options.additionalData), file: options.filename, outFile: options.filename, sourceMap: !!map });
+    const finalOptions = {
+        ...options,
+        data: getSource(source, options.filename, options.additionalData),
+        file: options.filename,
+        outFile: options.filename,
+        sourceMap: !!map
+    };
     try {
         const result = nodeSass.renderSync(finalOptions);
         const dependencies = result.stats.includedFiles;
@@ -17767,13 +18681,16 @@ const scss = (source, map, options) => {
         return { code: '', errors: [e], dependencies: [] };
     }
 };
-const sass = (source, map, options) => scss(source, map, Object.assign(Object.assign({}, options), { indentedSyntax: true }));
+const sass = (source, map, options) => scss(source, map, {
+    ...options,
+    indentedSyntax: true
+});
 // .less
 const less = (source, map, options) => {
     const nodeLess = require('less');
     let result;
     let error = null;
-    nodeLess.render(getSource(source, options.filename, options.additionalData), Object.assign(Object.assign({}, options), { syncImport: true }), (err, output) => {
+    nodeLess.render(getSource(source, options.filename, options.additionalData), { ...options, syncImport: true }, (err, output) => {
         error = err;
         result = output;
     });
@@ -17836,10 +18753,10 @@ const processors = {
 
 const postcss = require('postcss');
 function compileStyle(options) {
-    return doCompileStyle(Object.assign(Object.assign({}, options), { isAsync: false }));
+    return doCompileStyle({ ...options, isAsync: false });
 }
 function compileStyleAsync(options) {
-    return Promise.resolve(doCompileStyle(Object.assign(Object.assign({}, options), { isAsync: true })));
+    return Promise.resolve(doCompileStyle({ ...options, isAsync: true }));
 }
 function doCompileStyle(options) {
     const { filename, id, scoped = true, trim = true, isProd = false, preprocessLang, postcssOptions, postcssPlugins } = options;
@@ -17855,7 +18772,11 @@ function doCompileStyle(options) {
     if (scoped) {
         plugins.push(scopedPlugin(id));
     }
-    const postCSSOptions = Object.assign(Object.assign({}, postcssOptions), { to: filename, from: filename });
+    const postCSSOptions = {
+        ...postcssOptions,
+        to: filename,
+        from: filename
+    };
     if (map) {
         postCSSOptions.map = {
             inline: false,

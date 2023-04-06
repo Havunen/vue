@@ -751,7 +751,10 @@ class Dep {
         if (Dep.target) {
             Dep.target.addDep(this);
             if (info && Dep.target.onTrack) {
-                Dep.target.onTrack(Object.assign({ effect: Dep.target }, info));
+                Dep.target.onTrack({
+                    effect: Dep.target,
+                    ...info
+                });
             }
         }
     }
@@ -768,7 +771,10 @@ class Dep {
             const sub = subs[i];
             if (info) {
                 sub.onTrigger &&
-                    sub.onTrigger(Object.assign({ effect: subs[i] }, info));
+                    sub.onTrigger({
+                        effect: subs[i],
+                        ...info
+                    });
             }
             sub.update();
         }
@@ -3236,10 +3242,12 @@ function watchEffect(effect, options) {
     return doWatch(effect, null, options);
 }
 function watchPostEffect(effect, options) {
-    return doWatch(effect, null, (Object.assign(Object.assign({}, options), { flush: 'post' }) ));
+    return doWatch(effect, null, ({ ...options, flush: 'post' }
+        ));
 }
 function watchSyncEffect(effect, options) {
-    return doWatch(effect, null, (Object.assign(Object.assign({}, options), { flush: 'sync' }) ));
+    return doWatch(effect, null, ({ ...options, flush: 'sync' }
+        ));
 }
 // initial value for watchers to trigger on undefined initial values
 const INITIAL_WATCHER_VALUE = {};
