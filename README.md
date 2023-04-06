@@ -1,3 +1,11 @@
+# VUE2 FORK
+
+This version of vue2 differs from the original in following ways:
+
+- Code base is compiled for ES2018
+- compiler-sfc does not format files when process.env.NODE_ENV is 'test'
+- Internet Explorer support has been removed
+
 <p align="center"><a href="https://vuejs.org" target="_blank" rel="noopener noreferrer"><img width="100" src="https://vuejs.org/images/logo.png" alt="Vue logo"></a></p>
 
 <p align="center">

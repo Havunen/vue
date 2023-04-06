@@ -1782,7 +1782,8 @@ function getObjectOrArrayExpressionKeys(value: Node): string[] {
   return []
 }
 
-const templateUsageCheckCache = new LRU<string, string>(512)
+const cacheOptions: LRU.Options<string, string, unknown> = { ttl: 512, ttlAutopurge: false }
+const templateUsageCheckCache = new LRU(cacheOptions)
 
 function resolveTemplateUsageCheckString(sfc: SFCDescriptor, isTS: boolean) {
   const { content } = sfc.template!

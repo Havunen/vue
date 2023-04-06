@@ -12,7 +12,8 @@ import LRU from 'lru-cache'
 import { hmrShouldReload } from './compileScript'
 import { parseCssVars } from './cssVars'
 
-const cache = new LRU<string, SFCDescriptor>(100)
+const cacheOptions: LRU.Options<string, SFCDescriptor, unknown> = { ttl: 100, ttlAutopurge: false }
+const cache = new LRU(cacheOptions)
 
 const splitRE = /\r?\n/g
 const emptyRE = /^(?:\/\/)?\s*$/
