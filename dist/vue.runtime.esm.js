@@ -466,8 +466,6 @@ const isIE9 = UA && UA.indexOf('msie 9.0') > 0;
 const isEdge = UA && UA.indexOf('edge/') > 0;
 UA && UA.indexOf('android') > 0;
 const isIOS = UA && /iphone|ipad|ipod|ios/.test(UA);
-UA && /chrome\/\d+/.test(UA) && !isEdge;
-UA && /phantomjs/.test(UA);
 const isFF = UA && UA.match(/firefox\/(\d+)/);
 // Firefox has a "watch" function on Object.prototype...
 // @ts-expect-error firebox support
@@ -2212,6 +2210,13 @@ hasDynamicKeys, contentHashKey) {
 }
 
 // helper to process dynamic keys for dynamic arguments in v-bind and v-on.
+// For example, the following template:
+//
+// <div id="app" :[key]="value">
+//
+// compiles to the following:
+//
+// _c('div', { attrs: bindDynamicKeys({ "id": "app" }, [key, value]) })
 function bindDynamicKeys(baseObj, values) {
     for (let i = 0; i < values.length; i += 2) {
         const key = values[i];
@@ -6270,18 +6275,18 @@ function setStyleScope(node, scopeId) {
 
 var nodeOps = /*#__PURE__*/Object.freeze({
   __proto__: null,
+  appendChild: appendChild,
+  createComment: createComment,
   createElement: createElement,
   createElementNS: createElementNS,
   createTextNode: createTextNode,
-  createComment: createComment,
   insertBefore: insertBefore,
-  removeChild: removeChild,
-  appendChild: appendChild,
-  parentNode: parentNode,
   nextSibling: nextSibling,
-  tagName: tagName,
+  parentNode: parentNode,
+  removeChild: removeChild,
+  setStyleScope: setStyleScope,
   setTextContent: setTextContent,
-  setStyleScope: setStyleScope
+  tagName: tagName
 });
 
 var ref = {
@@ -8364,6 +8369,7 @@ var platformDirectives = {
 };
 
 // Provides transition support for a single element/component.
+// supports transition mode (out-in / in-out)
 const transitionProps = {
     name: String,
     appear: Boolean,
@@ -8531,6 +8537,14 @@ var Transition = {
 };
 
 // Provides transition support for list items.
+// supports move transitions using the FLIP technique.
+// Because the vdom's children update algorithm is "unstable" - i.e.
+// it doesn't guarantee the relative positioning of removed elements,
+// we force transition-group to update its children into two passes:
+// in the first pass, we remove all nodes that need to be removed,
+// triggering their leaving transition; in the second pass, we insert/move
+// into the final desired state. This way in the second pass removed
+// nodes will remain where they should be.
 const props = extend({
     tag: String,
     moveClass: String

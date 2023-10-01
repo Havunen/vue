@@ -33,6 +33,5 @@
       "types/*": ["src/types/*"],
       "vue": ["src/platforms/web/entry-runtime-with-compiler"]
     }
-  },
-  "include": ["src", "packages/*/src"]
+  }
 }

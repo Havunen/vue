@@ -9,5 +9,6 @@ module.exports = {
   shared: resolve('src/shared'),
   web: resolve('src/platforms/web'),
   server: resolve('packages/server-renderer/src'),
-  sfc: resolve('packages/compiler-sfc/src')
+  sfc: resolve('packages/compiler-sfc/src'),
+  'magic-string': resolve('packages/compiler-sfc/node_modules/magic-string/dist/magic-string.cjs.js')
 }

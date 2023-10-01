@@ -1,5 +1,5 @@
 import MagicString from 'magic-string'
-import LRU from 'lru-cache'
+import {LRUCache} from 'lru-cache'
 import { walkIdentifiers, isFunctionType } from './babelUtils'
 import { BindingMetadata, BindingTypes } from './types'
 import { SFCDescriptor, SFCScriptBlock } from './parseComponent'
@@ -9,10 +9,6 @@ import {
   ParserOptions,
   ParserPlugin
 } from '@babel/parser'
-import { generateCodeFrame } from 'compiler/codeframe'
-import { camelize, capitalize, isBuiltInTag, makeMap } from 'shared/util'
-import { parseHTML } from 'compiler/parser/html-parser'
-import { baseOptions as webCompilerOptions } from 'web/compiler/options'
 import {
   Node,
   Declaration,
@@ -35,8 +31,12 @@ import {
   LVal,
   Expression
 } from '@babel/types'
+import { generateCodeFrame } from 'compiler/codeframe'
+import { camelize, capitalize, isBuiltInTag, makeMap } from 'shared/util'
+import { parseHTML } from 'compiler/parser/html-parser'
+import { baseOptions as webCompilerOptions } from 'web/compiler/options'
 import { walk } from 'estree-walker'
-import { RawSourceMap } from 'source-map'
+import { RawSourceMap } from '@cspotcode/source-map'
 import { warnOnce } from './warn'
 import { isReservedTag } from 'web/util'
 import { bindRE, dirRE, onRE, slotRE } from 'compiler/parser'
@@ -966,9 +966,9 @@ export function compileScript(
       node.type === 'ExportDefaultDeclaration'
     ) {
       error(
-        `<script setup> cannot contain ES module exports. ` +
-          `If you are using a previous version of <script setup>, please ` +
-          `consult the updated RFC at https://github.com/vuejs/rfcs/pull/227.`,
+        '<script setup> cannot contain ES module exports. ' +
+          'If you use a previous version of <script setup>, please ' +
+          'consult the updated RFC at https://github.com/vuejs/rfcs/pull/227.',
         node
       )
     }
@@ -1572,7 +1572,7 @@ function extractRuntimeEmits(
 }
 
 function extractEventNames(
-  eventName: Identifier | RestElement,
+  eventName: Identifier | RestElement | ArrayPattern | ObjectPattern,
   emits: Set<string>
 ) {
   if (
@@ -1782,8 +1782,8 @@ function getObjectOrArrayExpressionKeys(value: Node): string[] {
   return []
 }
 
-const cacheOptions: LRU.Options<string, string, unknown> = { ttl: 512, ttlAutopurge: false }
-const templateUsageCheckCache = new LRU(cacheOptions)
+const cacheOptions: LRUCache.Options<string, string, unknown> = { ttl: 512, ttlAutopurge: false }
+const templateUsageCheckCache = new LRUCache(cacheOptions)
 
 function resolveTemplateUsageCheckString(sfc: SFCDescriptor, isTS: boolean) {
   const { content } = sfc.template!

@@ -38,27 +38,28 @@ test('should work', () => {
   expect(result.ast).not.toBeUndefined()
 })
 
-test('preprocess pug', () => {
-  const template = parse({
-    source:
-      '<template lang="pug">\n' +
-      'body\n' +
-      ' h1 Pug Examples\n' +
-      ' div.container\n' +
-      '   p Cool Pug example!\n' +
-      '</template>\n',
-    filename: 'example.vue',
-    sourceMap: true
-  }).template as SFCBlock
-
-  const result = compileTemplate({
-    filename: 'example.vue',
-    source: template.content,
-    preprocessLang: template.lang
-  })
-
-  expect(result.errors.length).toBe(0)
-})
+// Pug not supported
+// test('preprocess pug', () => {
+//   const template = parse({
+//     source:
+//       '<template lang="pug">\n' +
+//       'body\n' +
+//       ' h1 Pug Examples\n' +
+//       ' div.container\n' +
+//       '   p Cool Pug example!\n' +
+//       '</template>\n',
+//     filename: 'example.vue',
+//     sourceMap: true
+//   }).template as SFCBlock
+//
+//   const result = compileTemplate({
+//     filename: 'example.vue',
+//     source: template.content,
+//     preprocessLang: template.lang
+//   })
+//
+//   expect(result.errors.length).toBe(0)
+// })
 
 /**
  * vuejs/component-compiler-utils#22 Support uri fragment in transformed require

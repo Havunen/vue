@@ -1,8 +1,8 @@
-import deindent from 'de-indent'
 import { parseHTML } from 'compiler/parser/html-parser'
 import { makeMap } from 'shared/util'
 import { ASTAttr, WarningMessage } from 'types/compiler'
-import { BindingMetadata, RawSourceMap } from './types'
+import { BindingMetadata } from './types'
+import type { RawSourceMap } from '@cspotcode/source-map'
 import type { ImportBinding } from './compileScript'
 
 export const DEFAULT_FILENAME = 'anonymous.vue'
@@ -67,7 +67,6 @@ export interface SFCDescriptor {
 
 export interface VueTemplateCompilerParseOptions {
   pad?: 'line' | 'space' | boolean
-  deindent?: boolean
   outputSourceRange?: boolean
 }
 
@@ -177,17 +176,6 @@ export function parseComponent(
     if (depth === 1 && currentBlock) {
       currentBlock.end = start
       let text = source.slice(currentBlock.start, currentBlock.end)
-      if (
-        options.deindent === true ||
-        // by default, deindent unless it's script with default lang or (j/t)sx?
-        (options.deindent !== false &&
-          !(
-            currentBlock.type === 'script' &&
-            (!currentBlock.lang || /^(j|t)sx?$/.test(currentBlock.lang))
-          ))
-      ) {
-        text = deindent(text)
-      }
       // pad content so that linters and pre-processors can output correct
       // line numbers in errors and warnings
       if (currentBlock.type !== 'template' && options.pad) {

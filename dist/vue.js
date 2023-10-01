@@ -482,8 +482,6 @@
   const isEdge = UA && UA.indexOf('edge/') > 0;
   UA && UA.indexOf('android') > 0;
   const isIOS = UA && /iphone|ipad|ipod|ios/.test(UA);
-  UA && /chrome\/\d+/.test(UA) && !isEdge;
-  UA && /phantomjs/.test(UA);
   const isFF = UA && UA.match(/firefox\/(\d+)/);
   // Firefox has a "watch" function on Object.prototype...
   // @ts-expect-error firebox support
@@ -2051,6 +2049,13 @@
   }
 
   // helper to process dynamic keys for dynamic arguments in v-bind and v-on.
+  // For example, the following template:
+  //
+  // <div id="app" :[key]="value">
+  //
+  // compiles to the following:
+  //
+  // _c('div', { attrs: bindDynamicKeys({ "id": "app" }, [key, value]) })
   function bindDynamicKeys(baseObj, values) {
       for (let i = 0; i < values.length; i += 2) {
           const key = values[i];
@@ -3951,62 +3956,62 @@
 
   var vca = /*#__PURE__*/Object.freeze({
     __proto__: null,
-    version: version,
-    defineComponent: defineComponent,
-    ref: ref$1,
-    shallowRef: shallowRef,
-    isRef: isRef,
-    toRef: toRef,
-    toRefs: toRefs,
-    unref: unref,
-    proxyRefs: proxyRefs,
+    EffectScope: EffectScope,
+    computed: computed,
     customRef: customRef,
-    triggerRef: triggerRef,
-    reactive: reactive,
+    defineAsyncComponent: defineAsyncComponent,
+    defineComponent: defineComponent,
+    del: del,
+    effectScope: effectScope,
+    getCurrentInstance: getCurrentInstance,
+    getCurrentScope: getCurrentScope,
+    h: h,
+    inject: inject,
+    isProxy: isProxy,
     isReactive: isReactive,
     isReadonly: isReadonly,
+    isRef: isRef,
     isShallow: isShallow,
-    isProxy: isProxy,
-    shallowReactive: shallowReactive,
     markRaw: markRaw,
-    toRaw: toRaw,
+    mergeDefaults: mergeDefaults,
+    nextTick: nextTick,
+    onActivated: onActivated,
+    onBeforeMount: onBeforeMount,
+    onBeforeUnmount: onBeforeUnmount,
+    onBeforeUpdate: onBeforeUpdate,
+    onDeactivated: onDeactivated,
+    onErrorCaptured: onErrorCaptured,
+    onMounted: onMounted,
+    onRenderTracked: onRenderTracked,
+    onRenderTriggered: onRenderTriggered,
+    onScopeDispose: onScopeDispose,
+    onServerPrefetch: onServerPrefetch,
+    onUnmounted: onUnmounted,
+    onUpdated: onUpdated,
+    provide: provide,
+    proxyRefs: proxyRefs,
+    reactive: reactive,
     readonly: readonly,
+    ref: ref$1,
+    set: set,
+    shallowReactive: shallowReactive,
     shallowReadonly: shallowReadonly,
-    computed: computed,
+    shallowRef: shallowRef,
+    toRaw: toRaw,
+    toRef: toRef,
+    toRefs: toRefs,
+    triggerRef: triggerRef,
+    unref: unref,
+    useAttrs: useAttrs,
+    useCssModule: useCssModule,
+    useCssVars: useCssVars,
+    useListeners: useListeners,
+    useSlots: useSlots,
+    version: version,
     watch: watch,
     watchEffect: watchEffect,
     watchPostEffect: watchPostEffect,
-    watchSyncEffect: watchSyncEffect,
-    EffectScope: EffectScope,
-    effectScope: effectScope,
-    onScopeDispose: onScopeDispose,
-    getCurrentScope: getCurrentScope,
-    provide: provide,
-    inject: inject,
-    h: h,
-    getCurrentInstance: getCurrentInstance,
-    useSlots: useSlots,
-    useAttrs: useAttrs,
-    useListeners: useListeners,
-    mergeDefaults: mergeDefaults,
-    nextTick: nextTick,
-    set: set,
-    del: del,
-    useCssModule: useCssModule,
-    useCssVars: useCssVars,
-    defineAsyncComponent: defineAsyncComponent,
-    onBeforeMount: onBeforeMount,
-    onMounted: onMounted,
-    onBeforeUpdate: onBeforeUpdate,
-    onUpdated: onUpdated,
-    onBeforeUnmount: onBeforeUnmount,
-    onUnmounted: onUnmounted,
-    onActivated: onActivated,
-    onDeactivated: onDeactivated,
-    onServerPrefetch: onServerPrefetch,
-    onRenderTracked: onRenderTracked,
-    onRenderTriggered: onRenderTriggered,
-    onErrorCaptured: onErrorCaptured
+    watchSyncEffect: watchSyncEffect
   });
 
   const seenObjects = new _Set();
@@ -6284,18 +6289,18 @@
 
   var nodeOps = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    appendChild: appendChild,
+    createComment: createComment,
     createElement: createElement,
     createElementNS: createElementNS,
     createTextNode: createTextNode,
-    createComment: createComment,
     insertBefore: insertBefore,
-    removeChild: removeChild,
-    appendChild: appendChild,
-    parentNode: parentNode,
     nextSibling: nextSibling,
-    tagName: tagName,
+    parentNode: parentNode,
+    removeChild: removeChild,
+    setStyleScope: setStyleScope,
     setTextContent: setTextContent,
-    setStyleScope: setStyleScope
+    tagName: tagName
   });
 
   var ref = {
@@ -8902,6 +8907,7 @@
   };
 
   // Provides transition support for a single element/component.
+  // supports transition mode (out-in / in-out)
   const transitionProps = {
       name: String,
       appear: Boolean,
@@ -9069,6 +9075,14 @@
   };
 
   // Provides transition support for list items.
+  // supports move transitions using the FLIP technique.
+  // Because the vdom's children update algorithm is "unstable" - i.e.
+  // it doesn't guarantee the relative positioning of removed elements,
+  // we force transition-group to update its children into two passes:
+  // in the first pass, we remove all nodes that need to be removed,
+  // triggering their leaving transition; in the second pass, we insert/move
+  // into the final desired state. This way in the second pass removed
+  // nodes will remain where they should be.
   const props = extend({
       tag: String,
       moveClass: String
@@ -9405,6 +9419,12 @@
 
   /**
    * Not type-checking this file because it's mostly vendor code.
+   */
+  /*!
+   * HTML Parser By John Resig (ejohn.org)
+   * Modified by Juriy "kangax" Zaytsev
+   * Original code by Erik Arvidsson (MPL-1.1 OR Apache-2.0 OR GPL-2.0-or-later)
+   * http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
    */
   // Regular Expressions for parsing tags and attributes
   const attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;

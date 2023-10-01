@@ -1,5 +1,5 @@
-import { SourceMapGenerator } from 'source-map'
-import { RawSourceMap, TemplateCompiler } from './types'
+import {RawSourceMap, SourceMapGenerator} from '@cspotcode/source-map'
+import { TemplateCompiler } from './types'
 import {
   parseComponent,
   VueTemplateCompilerParseOptions,
@@ -8,12 +8,12 @@ import {
 } from './parseComponent'
 
 import hash from 'hash-sum'
-import LRU from 'lru-cache'
+import {LRUCache} from 'lru-cache'
 import { hmrShouldReload } from './compileScript'
 import { parseCssVars } from './cssVars'
 
-const cacheOptions: LRU.Options<string, SFCDescriptor, unknown> = { ttl: 100, ttlAutopurge: false }
-const cache = new LRU(cacheOptions)
+const cacheOptions: LRUCache.Options<string, SFCDescriptor, unknown> = { ttl: 100, ttlAutopurge: false }
+const cache = new LRUCache(cacheOptions)
 
 const splitRE = /\r?\n/g
 const emptyRE = /^(?:\/\/)?\s*$/

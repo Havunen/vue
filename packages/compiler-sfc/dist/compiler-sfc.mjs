@@ -1,13 +1,11 @@
-'use strict';
-
-var sourceMap = require('@cspotcode/source-map');
-var parser$1 = require('@babel/parser');
-var url = require('url');
-var path = require('path');
-var require$$0 = require('fs');
-var require$$2 = require('util');
-var postcss = require('postcss');
-var sass$1 = require('sass');
+import { SourceMapGenerator, SourceMapConsumer } from '@cspotcode/source-map';
+import { parseExpression, parse as parse$2 } from '@babel/parser';
+import { parse as parse$3 } from 'url';
+import path from 'path';
+import require$$0 from 'fs';
+import require$$2 from 'util';
+import postcss from 'postcss';
+import { renderSync } from 'sass';
 
 const emptyObject = Object.freeze({});
 const isArray = Array.isArray;
@@ -9244,7 +9242,7 @@ function prefixIdentifiers(source, isFunctional = false, isTS = false, babelOpti
         ...(isTS ? ['typescript'] : []),
         ...((babelOptions === null || babelOptions === void 0 ? void 0 : babelOptions.plugins) || [])
     ];
-    const ast = parser$1.parseExpression(source, {
+    const ast = parseExpression(source, {
         ...babelOptions,
         plugins
     });
@@ -9434,7 +9432,7 @@ function rewriteDefault(input, as, parserPlugins) {
     // if the script somehow still contains `default export`, it probably has
     // multi-line comments or template strings. fallback to a full parse.
     const s = new MagicString$1(input);
-    const ast = parser$1.parse(input, {
+    const ast = parse$2(input, {
         sourceType: 'module',
         plugins: parserPlugins
     }).program.body;
@@ -9555,7 +9553,7 @@ function compileScript(sfc, options = { id: '' }) {
         try {
             let content = script.content;
             let map = script.map;
-            const scriptAst = parser$1.parse(content, {
+            const scriptAst = parse$2(content, {
                 plugins,
                 sourceType: 'module'
             }).program;
@@ -9628,7 +9626,7 @@ function compileScript(sfc, options = { id: '' }) {
     }
     function parse(input, options, offset) {
         try {
-            return parser$1.parse(input, options).program;
+            return parse$2(input, options).program;
         }
         catch (e) {
             e.message = `[@vue/compiler-sfc] ${e.message}\n\n${filename}\n${generateCodeFrame(source, e.pos + offset, e.pos + offset + 1)}`;
@@ -10859,7 +10857,7 @@ function processExp(exp, isTS, dir) {
         }
         let ret = '';
         // has potential type cast or generic arguments that uses types
-        const ast = parser$1.parseExpression(exp, { plugins: ['typescript'] });
+        const ast = parseExpression(exp, { plugins: ['typescript'] });
         walkIdentifiers(ast, node => {
             ret += `,` + node.name;
         });
@@ -10946,7 +10944,7 @@ function parse(options) {
     return output;
 }
 function generateSourceMap(filename, source, generated, sourceRoot, pad) {
-    const map = new sourceMap.SourceMapGenerator({
+    const map = new SourceMapGenerator({
         file: filename.replace(/\\/g, '/'),
         sourceRoot: sourceRoot.replace(/\\/g, '/')
     });
@@ -11023,13 +11021,13 @@ function urlToRequire(url, transformAssetUrlsOption = {}) {
  */
 function parseUriParts(urlString) {
     // initialize return value
-    const returnValue = url.parse('');
+    const returnValue = parse$3('');
     if (urlString) {
         // A TypeError is thrown if urlString is not a string
         // @see https://nodejs.org/api/url.html#url_url_parse_urlstring_parsequerystring_slashesdenotehost
         if ('string' === typeof urlString) {
             // check is an uri
-            return url.parse(urlString, false, true); // take apart the uri
+            return parse$3(urlString, false, true); // take apart the uri
         }
     }
     return returnValue;
@@ -18211,9 +18209,9 @@ function merge(oldMap, newMap) {
         return newMap;
     if (!newMap)
         return oldMap;
-    var oldMapConsumer = new sourceMap.SourceMapConsumer(oldMap);
-    var newMapConsumer = new sourceMap.SourceMapConsumer(newMap);
-    var mergedMapGenerator = new sourceMap.SourceMapGenerator();
+    var oldMapConsumer = new SourceMapConsumer(oldMap);
+    var newMapConsumer = new SourceMapConsumer(newMap);
+    var mergedMapGenerator = new SourceMapGenerator();
     // iterate on new map and overwrite original position of new map with one of old map
     newMapConsumer.eachMapping(function (m) {
         // pass when `originalLine` is null.
@@ -18263,7 +18261,7 @@ const scss = (source, map, options) => {
         sourceMap: !!map
     };
     try {
-        const result = sass$1.renderSync(finalOptions);
+        const result = renderSync(finalOptions);
         const dependencies = result.stats.includedFiles;
         if (map) {
             return {
@@ -18371,11 +18369,4 @@ function preprocess(options, preprocessor) {
     }, options.preprocessOptions));
 }
 
-exports.compileScript = compileScript;
-exports.compileStyle = compileStyle;
-exports.compileStyleAsync = compileStyleAsync;
-exports.compileTemplate = compileTemplate;
-exports.generateCodeFrame = generateCodeFrame;
-exports.parse = parse;
-exports.parseComponent = parseComponent;
-exports.rewriteDefault = rewriteDefault;
+export { compileScript, compileStyle, compileStyleAsync, compileTemplate, generateCodeFrame, parse, parseComponent, rewriteDefault };

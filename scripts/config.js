@@ -142,6 +142,14 @@ const builds = {
       require('../packages/template-compiler/package.json').dependencies
     )
   },
+  'compiler-mjs': {
+    entry: resolve('web/entry-compiler.ts'),
+    dest: resolve('packages/template-compiler/build.mjs'),
+    format: 'esm',
+    external: Object.keys(
+        require('../packages/template-compiler/package.json').dependencies
+    )
+  },
   // Web compiler (UMD for in-browser use).
   'compiler-browser': {
     entry: resolve('web/entry-compiler.ts'),
@@ -206,6 +214,29 @@ const builds = {
     format: 'cjs',
     external: Object.keys(
       require('../packages/compiler-sfc/package.json').dependencies
+    ),
+    plugins: [
+      node({ preferBuiltins: true }),
+      cjs({
+        ignore: [
+          ...Object.keys(require(consolidatePath).devDependencies),
+          'vm',
+          'crypto',
+          'react-dom/server',
+          'teacup/lib/express',
+          'arc-templates/dist/es5',
+          'then-pug',
+          'then-jade'
+        ]
+      })
+    ]
+  },
+  'compiler-sfc-mjs': {
+    entry: resolve('packages/compiler-sfc/src/index.ts'),
+    dest: resolve('packages/compiler-sfc/dist/compiler-sfc.mjs'),
+    format: 'esm',
+    external: Object.keys(
+        require('../packages/compiler-sfc/package.json').dependencies
     ),
     plugins: [
       node({ preferBuiltins: true }),

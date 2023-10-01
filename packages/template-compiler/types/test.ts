@@ -79,8 +79,7 @@ const vnode: VNode = compiledFns.render.call(vm)
 
 // check SFC parser
 const desc = parseComponent('<template></template>', {
-  pad: 'space',
-  deindent: false
+  pad: 'space'
 })
 
 const templateContent: string = desc.template!.content

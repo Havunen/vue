@@ -1,19 +1,6 @@
 import { CompilerOptions, CompiledResult } from 'types/compiler'
 import { SFCDescriptor } from './parseComponent'
 
-export interface StartOfSourceMap {
-  file?: string
-  sourceRoot?: string
-}
-
-export interface RawSourceMap extends StartOfSourceMap {
-  version: string
-  sources: string[]
-  names: string[]
-  sourcesContent?: string[]
-  mappings: string
-}
-
 export interface TemplateCompiler {
   parseComponent(source: string, options?: any): SFCDescriptor
   compile(template: string, options: CompilerOptions): CompiledResult

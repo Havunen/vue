@@ -1,4 +1,4 @@
-const postcss = require('postcss')
+import postcss from "postcss";
 import { ProcessOptions, LazyResult } from 'postcss'
 import trimPlugin from './stylePlugins/trim'
 import scopedPlugin from './stylePlugins/scoped'

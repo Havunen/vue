@@ -107,7 +107,6 @@ function actuallyCompile(
     isProduction = (process.env.NODE_ENV === 'production') || (process.env.NODE_ENV === 'test'),
     isFunctional = false,
     optimizeSSR = false,
-    prettify = true,
     isTS = false,
     bindings
   } = options
@@ -174,24 +173,24 @@ function actuallyCompile(
       // detection)
       code += `render._withStripped = true`
 
-      if (prettify) {
-        try {
-          code = require('prettier').format(code, {
-            semi: false,
-            parser: 'babel'
-          })
-        } catch (e: any) {
-          if (e.code === 'MODULE_NOT_FOUND') {
-            tips.push(
-              'The `prettify` option is on, but the dependency `prettier` is not found.\n' +
-                'Please either turn off `prettify` or manually install `prettier`.'
-            )
-          }
-          tips.push(
-            `Failed to prettify component ${options.filename} template source after compilation.`
-          )
-        }
-      }
+      // if (prettify) {
+      //   try {
+      //     code = require('prettier').format(code, {
+      //       semi: false,
+      //       parser: 'babel'
+      //     })
+      //   } catch (e: any) {
+      //     if (e.code === 'MODULE_NOT_FOUND') {
+      //       tips.push(
+      //         'The `prettify` option is on, but the dependency `prettier` is not found.\n' +
+      //           'Please either turn off `prettify` or manually install `prettier`.'
+      //       )
+      //     }
+      //     tips.push(
+      //       `Failed to prettify component ${options.filename} template source after compilation.`
+      //     )
+      //   }
+      // }
     }
 
     return {

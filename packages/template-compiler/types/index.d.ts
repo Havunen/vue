@@ -186,7 +186,6 @@ export interface ASTText {
  */
 interface SFCParserOptions {
   pad?: true | 'line' | 'space'
-  deindent?: boolean
 }
 
 export interface SFCBlock {
