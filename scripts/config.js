@@ -71,6 +71,26 @@ const builds = {
     format: 'es',
     banner
   },
+  'runtime-esm-mjs': {
+    entry: resolve('web/entry-runtime-esm.ts'),
+    dest: resolve('dist/vue.runtime.mjs'),
+    format: 'es',
+    banner
+  },
+  'runtime-esm-dev-mjs': {
+    entry: resolve('web/entry-runtime-esm.ts'),
+    dest: resolve('dist/vue.runtime.dev.mjs'),
+    format: 'es',
+    env: 'development',
+    banner
+  },
+  'runtime-esm-prod-mjs': {
+    entry: resolve('web/entry-runtime-esm.ts'),
+    dest: resolve('dist/vue.runtime.prod.mjs'),
+    format: 'es',
+    env: 'production',
+    banner
+  },
   // Runtime+compiler ES modules build (for bundlers)
   'full-esm': {
     entry: resolve('web/entry-runtime-with-compiler-esm.ts'),
