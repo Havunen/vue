@@ -12,7 +12,7 @@
     "@babel/parser": "^7.23.0",
     "@cspotcode/source-map": "^0.8.0",
     "postcss": "^8.4.31",
-    "sass": "^1.68.0"
+    "sass": "^1.69.5"
   },
   "devDependencies": {
     "@babel/types": "^7.23.0",
@@ -20,7 +20,7 @@
     "estree-walker": "^3.0.3",
     "hash-sum": "^2.0.0",
     "lru-cache": "^10.0.1",
-    "magic-string": "^0.30.4",
+    "magic-string": "^0.30.5",
     "postcss-modules": "^6.0.0",
     "postcss-selector-parser": "^6.0.13"
   }

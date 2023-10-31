@@ -29,16 +29,16 @@
     "he": "^1.2.0",
     "lodash.template": "^4.5.0",
     "lodash.uniq": "^4.5.0",
-    "resolve": "^1.22.2",
+    "resolve": "^1.22.8",
     "serialize-javascript": "^6.0.1",
     "@cspotcode/source-map": "^0.8.0"
   },
   "devDependencies": {
-    "@types/webpack": "^5.28.1",
+    "@types/webpack": "^5.28.4",
     "file-loader": "^6.2.0",
     "memory-fs": "^0.5.0",
     "vue": "file:../..",
-    "webpack": "^5.78.0"
+    "webpack": "^5.89.0"
   },
   "homepage": "https://github.com/vuejs/vue/tree/dev/packages/vue-server-renderer#readme"
 }

@@ -189,9 +189,7 @@ const identity = (_) => _;
  */
 function genStaticKeys$1(modules) {
     return modules
-        .reduce((keys, m) => {
-        return keys.concat(m.staticKeys || []);
-    }, [])
+        .reduce((keys, m) => keys.concat(m.staticKeys || []), [])
         .join(',');
 }
 /**
@@ -6018,7 +6016,7 @@ function deactivateChildComponent(vm, direct) {
 function callHook(vm, hook, args, setContext = true) {
     // #7573 disable dep collection when invoking lifecycle hooks
     pushTarget();
-    const prev = currentInstance;
+    const prevInst = currentInstance;
     setContext && setCurrentInstance(vm);
     const handlers = vm.$options[hook];
     const info = `${hook} hook`;
@@ -6030,7 +6028,9 @@ function callHook(vm, hook, args, setContext = true) {
     if (vm._hasHookEvent) {
         vm.$emit('hook:' + hook);
     }
-    setContext && setCurrentInstance(prev);
+    if (setContext) {
+        setCurrentInstance(prevInst);
+    }
     popTarget();
 }
 
@@ -9723,7 +9723,10 @@ function compileScript(sfc, options = { id: '' }) {
             }
         }
         if (declId) {
-            emitIdentifier = scriptSetup.content.slice(declId.start, declId.end);
+            emitIdentifier =
+                declId.type === 'Identifier'
+                    ? declId.name
+                    : scriptSetup.content.slice(declId.start, declId.end);
         }
         return true;
     }
@@ -10100,12 +10103,12 @@ function compileScript(sfc, options = { id: '' }) {
                         else {
                             let start = decl.start + startOffset;
                             let end = decl.end + startOffset;
-                            if (i < total - 1) {
-                                // not the last one, locate the start of the next
+                            if (i === 0) {
+                                // first one, locate the start of the next
                                 end = node.declarations[i + 1].start + startOffset;
                             }
                             else {
-                                // last one, locate the end of the prev
+                                // not first one, locate the end of the prev
                                 start = node.declarations[i - 1].end + startOffset;
                             }
                             s.remove(start, end);
@@ -10279,7 +10282,7 @@ function compileScript(sfc, options = { id: '' }) {
     // we use a default __props so that template expressions referencing props
     // can use it directly
     if (propsIdentifier) {
-        s.prependLeft(startOffset, `\nconst ${propsIdentifier} = __props${propsTypeDecl ? ` as ${genSetupPropsType(propsTypeDecl)}` : ``}\n`);
+        s.prependLeft(startOffset, `\nconst ${propsIdentifier} = __props${propsTypeDecl ? ` as ${genSetupPropsType(propsTypeDecl)}` : ``};\n`);
     }
     const destructureElements = hasDefineExposeCall ? [`expose`] : [];
     if (emitIdentifier) {
@@ -10848,7 +10851,7 @@ function processExp(exp, isTS, dir) {
             exp = `(${exp})=>{}`;
         }
         else if (dir === 'on') {
-            exp = `()=>{${exp}}`;
+            exp = `()=>{return ${exp}}`;
         }
         else if (dir === 'for') {
             const inMatch = exp.match(forAliasRE);
