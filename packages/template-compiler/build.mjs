@@ -70,8 +70,15 @@ function toString(val) {
     return val == null
         ? ''
         : Array.isArray(val) || (isPlainObject(val) && val.toString === _toString)
-            ? JSON.stringify(val, null, 2)
+            ? JSON.stringify(val, replacer, 2)
             : String(val);
+}
+function replacer(_key, val) {
+    // avoid circular deps from v3
+    if (val && val.__v_isRef) {
+        return val.value;
+    }
+    return val;
 }
 /**
  * Convert an input value to a number for persistence.
@@ -580,7 +587,7 @@ function parseComponent(source, options = {}) {
         filename: DEFAULT_FILENAME,
         template: null,
         script: null,
-        scriptSetup: null,
+        scriptSetup: null, // TODO
         styles: [],
         customBlocks: [],
         cssVars: [],
@@ -610,7 +617,7 @@ function parseComponent(source, options = {}) {
                 type: tag,
                 content: '',
                 start: end,
-                end: 0,
+                end: 0, // will be set on tag close
                 attrs: attrs.reduce((cumulated, { name, value }) => {
                     cumulated[name] = value || true;
                     return cumulated;
@@ -1186,7 +1193,7 @@ function observe(value, shallow, ssrMockReactivity) {
 /**
  * Define a reactive property on an Object.
  */
-function defineReactive(obj, key, val, customSetter, shallow, mock) {
+function defineReactive(obj, key, val, customSetter, shallow, mock, observeEvenIfShallow = false) {
     const dep = new Dep();
     const property = Object.getOwnPropertyDescriptor(obj, key);
     if (property && property.configurable === false) {
@@ -1199,7 +1206,7 @@ function defineReactive(obj, key, val, customSetter, shallow, mock) {
         (val === NO_INITIAL_VALUE || arguments.length === 2)) {
         val = obj[key];
     }
-    let childOb = !shallow && observe(val, false, mock);
+    let childOb = shallow ? val && val.__ob__ : observe(val, false, mock);
     Object.defineProperty(obj, key, {
         enumerable: true,
         configurable: true,
@@ -1247,7 +1254,7 @@ function defineReactive(obj, key, val, customSetter, shallow, mock) {
             else {
                 val = newVal;
             }
-            childOb = !shallow && observe(newVal, false, mock);
+            childOb = shallow ? newVal && newVal.__ob__ : observe(newVal, false, mock);
             if (process.env.NODE_ENV !== 'production') {
                 dep.notify({
                     type: "set" /* TriggerOpTypes.SET */,
@@ -6343,10 +6350,10 @@ function genStyleSegments(staticStyle, parsedStaticStyle, styleBinding, vShowExp
  */
 // optimizability constants
 const optimizability = {
-    FALSE: 0,
-    FULL: 1,
-    SELF: 2,
-    CHILDREN: 3,
+    FALSE: 0, // whole sub tree un-optimizable
+    FULL: 1, // whole sub tree optimizable
+    SELF: 2, // self optimizable but has some un-optimizable children
+    CHILDREN: 3, // self un-optimizable but have fully optimizable children
     PARTIAL: 4 // self un-optimizable with some un-optimizable children
 };
 let isPlatformReservedTag;

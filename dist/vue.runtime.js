@@ -1,6 +1,6 @@
 /*!
- * Vue.js v2.7.15
- * (c) 2014-2023 Evan You
+ * Vue.js v2.7.16
+ * (c) 2014-2024 Evan You
  * Released under the MIT License.
  */
 (function (global, factory) {
@@ -82,8 +82,15 @@
       return val == null
           ? ''
           : Array.isArray(val) || (isPlainObject(val) && val.toString === _toString)
-              ? JSON.stringify(val, null, 2)
+              ? JSON.stringify(val, replacer, 2)
               : String(val);
+  }
+  function replacer(_key, val) {
+      // avoid circular deps from v3
+      if (val && val.__v_isRef) {
+          return val.value;
+      }
+      return val;
   }
   /**
    * Convert an input value to a number for persistence.
@@ -853,7 +860,7 @@
   /**
    * Define a reactive property on an Object.
    */
-  function defineReactive(obj, key, val, customSetter, shallow, mock) {
+  function defineReactive(obj, key, val, customSetter, shallow, mock, observeEvenIfShallow = false) {
       const dep = new Dep();
       const property = Object.getOwnPropertyDescriptor(obj, key);
       if (property && property.configurable === false) {
@@ -866,7 +873,7 @@
           (val === NO_INITIAL_VALUE || arguments.length === 2)) {
           val = obj[key];
       }
-      let childOb = !shallow && observe(val, false, mock);
+      let childOb = shallow ? val && val.__ob__ : observe(val, false, mock);
       Object.defineProperty(obj, key, {
           enumerable: true,
           configurable: true,
@@ -911,7 +918,7 @@
               else {
                   val = newVal;
               }
-              childOb = !shallow && observe(newVal, false, mock);
+              childOb = shallow ? newVal && newVal.__ob__ : observe(newVal, false, mock);
               {
                   dep.notify({
                       type: "set" /* TriggerOpTypes.SET */,
@@ -1395,7 +1402,12 @@
               `function, a ref, a reactive object, or an array of these types.`);
       };
       const instance = currentInstance;
-      const call = (fn, type, args = null) => invokeWithErrorHandling(fn, null, args, instance, type);
+      const call = (fn, type, args = null) => {
+          const res = invokeWithErrorHandling(fn, null, args, instance, type);
+          if (deep && res && res.__ob__)
+              res.__ob__.dep.depend();
+          return res;
+      };
       let getter;
       let forceTrigger = false;
       let isMultiSource = false;
@@ -1418,6 +1430,7 @@
                   return s.value;
               }
               else if (isReactive(s)) {
+                  s.__ob__.dep.depend();
                   return traverse(s);
               }
               else if (isFunction(s)) {
@@ -2597,11 +2610,10 @@
           // to the data on the placeholder node.
           vm.$vnode = _parentVnode;
           // render self
+          const prevInst = currentInstance;
+          const prevRenderInst = currentRenderingInstance;
           let vnode;
           try {
-              // There's no need to maintain a stack because all render fns are called
-              // separately from one another. Nested component's render fns are called
-              // when parent component is patched.
               setCurrentInstance(vm);
               currentRenderingInstance = vm;
               vnode = render.call(vm._renderProxy, vm.$createElement);
@@ -2625,8 +2637,8 @@
               }
           }
           finally {
-              currentRenderingInstance = null;
-              setCurrentInstance();
+              currentRenderingInstance = prevRenderInst;
+              setCurrentInstance(prevInst);
           }
           // if the returned array contains only a single node, allow it
           if (isArray(vnode) && vnode.length === 1) {
@@ -3229,7 +3241,7 @@
   /**
    * Note: also update dist/vue.runtime.mjs when adding new exports to this file.
    */
-  const version = '2.7.15';
+  const version = '2.7.16';
   /**
    * @internal type is manually declared in <root>/types/v3-define-component.d.ts
    */
@@ -5370,7 +5382,7 @@
                           `Instead, use a data or computed property based on the prop's ` +
                           `value. Prop being mutated: "${key}"`, vm);
                   }
-              });
+              }, true /* shallow */);
           }
           // static props are already proxied on the component's prototype
           // during Vue.extend(). We only need to proxy props defined at
@@ -5619,6 +5631,9 @@
           vm.__v_skip = true;
           // effect scope
           vm._scope = new EffectScope(true /* detached */);
+          // #13134 edge case where a child component is manually created during the
+          // render of a parent component
+          vm._scope.parent = undefined;
           vm._scope._vm = true;
           // merge options
           if (options && options._isComponent) {
@@ -5876,7 +5891,7 @@
       return false;
   }
   function pruneCache(keepAliveInstance, filter) {
-      const { cache, keys, _vnode } = keepAliveInstance;
+      const { cache, keys, _vnode, $vnode } = keepAliveInstance;
       for (const key in cache) {
           const entry = cache[key];
           if (entry) {
@@ -5886,6 +5901,7 @@
               }
           }
       }
+      $vnode.componentOptions.children = undefined;
   }
   function pruneCacheEntry(cache, key, keys, current) {
       const entry = cache[key];
@@ -7693,10 +7709,8 @@
       }
       for (name in newStyle) {
           cur = newStyle[name];
-          if (cur !== oldStyle[name]) {
-              // ie9 setting to null has no effect, must use empty string
-              setProp(el, name, cur == null ? '' : cur);
-          }
+          // ie9 setting to null has no effect, must use empty string
+          setProp(el, name, cur == null ? '' : cur);
       }
   }
   var style = {
