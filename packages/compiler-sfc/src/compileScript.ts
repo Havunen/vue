@@ -1,5 +1,5 @@
 import MagicString from 'magic-string'
-import {LRUCache} from 'lru-cache'
+import { LRUCache } from 'lru-cache'
 import { walkIdentifiers, isFunctionType } from './babelUtils'
 import { BindingMetadata, BindingTypes } from './types'
 import { SFCDescriptor, SFCScriptBlock } from './parseComponent'
@@ -1575,7 +1575,7 @@ function extractRuntimeEmits(
 }
 
 function extractEventNames(
-  eventName: Identifier | RestElement | ArrayPattern | ObjectPattern,
+  eventName: ArrayPattern | Identifier | ObjectPattern | RestElement,
   emits: Set<string>
 ) {
   if (
@@ -1785,7 +1785,10 @@ function getObjectOrArrayExpressionKeys(value: Node): string[] {
   return []
 }
 
-const cacheOptions: LRUCache.Options<string, string, unknown> = { ttl: 512, ttlAutopurge: false }
+const cacheOptions: LRUCache.Options<string, string, unknown> = {
+  ttl: 512,
+  ttlAutopurge: false
+}
 const templateUsageCheckCache = new LRUCache(cacheOptions)
 
 function resolveTemplateUsageCheckString(sfc: SFCDescriptor, isTS: boolean) {
@@ -1819,6 +1822,8 @@ function resolveTemplateUsageCheckString(sfc: SFCDescriptor, isTS: boolean) {
           if (value) {
             code += `,${processExp(value, isTS, baseName)}`
           }
+        } else if (name === 'ref') {
+          code += `,${value}`
         }
       }
     },
