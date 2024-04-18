@@ -62,7 +62,7 @@ export async function createWebpackBundleRenderer(
       filename: 'bundle.js',
       libraryTarget: 'commonjs2'
     },
-    externals: [require.resolve('../../../dist/vue.runtime.common.js')],
+    externals: [require.resolve('../../../dist/vue.runtime.common.cjs')],
     plugins: asBundle ? [new VueSSRServerPlugin()] : []
   })
 
