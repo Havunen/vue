@@ -12,6 +12,7 @@
   "files": [
     "src",
     "dist/*.js",
+    "dist/*.cjs",
     "dist/*.mjs",
     "types/*.d.ts",
     "compiler-sfc",
