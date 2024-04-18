@@ -35,14 +35,14 @@ const builds = {
   // Runtime only (CommonJS). Used by bundlers e.g. Webpack & Browserify
   'runtime-cjs-dev': {
     entry: resolve('web/entry-runtime.ts'),
-    dest: resolve('dist/vue.runtime.common.dev.js'),
+    dest: resolve('dist/vue.runtime.common.dev.cjs'),
     format: 'cjs',
     env: 'development',
     banner
   },
   'runtime-cjs-prod': {
     entry: resolve('web/entry-runtime.ts'),
-    dest: resolve('dist/vue.runtime.common.prod.js'),
+    dest: resolve('dist/vue.runtime.common.prod.cjs'),
     format: 'cjs',
     env: 'production',
     banner
@@ -50,7 +50,7 @@ const builds = {
   // Runtime+compiler CommonJS build (CommonJS)
   'full-cjs-dev': {
     entry: resolve('web/entry-runtime-with-compiler.ts'),
-    dest: resolve('dist/vue.common.dev.js'),
+    dest: resolve('dist/vue.common.dev.cjs'),
     format: 'cjs',
     env: 'development',
     alias: { he: './entity-decoder' },
@@ -58,7 +58,7 @@ const builds = {
   },
   'full-cjs-prod': {
     entry: resolve('web/entry-runtime-with-compiler.ts'),
-    dest: resolve('dist/vue.common.prod.js'),
+    dest: resolve('dist/vue.common.prod.cjs'),
     format: 'cjs',
     env: 'production',
     alias: { he: './entity-decoder' },
@@ -67,7 +67,7 @@ const builds = {
   // Runtime only ES modules build (for bundlers)
   'runtime-esm': {
     entry: resolve('web/entry-runtime-esm.ts'),
-    dest: resolve('dist/vue.runtime.esm.js'),
+    dest: resolve('dist/vue.runtime.esm.mjs'),
     format: 'es',
     banner
   },
@@ -94,7 +94,7 @@ const builds = {
   // Runtime+compiler ES modules build (for bundlers)
   'full-esm': {
     entry: resolve('web/entry-runtime-with-compiler-esm.ts'),
-    dest: resolve('dist/vue.esm.js'),
+    dest: resolve('dist/vue.esm.mjs'),
     format: 'es',
     alias: { he: './entity-decoder' },
     banner
@@ -102,7 +102,7 @@ const builds = {
   // Runtime+compiler ES modules build (for direct import in browser)
   'full-esm-browser-dev': {
     entry: resolve('web/entry-runtime-with-compiler-esm.ts'),
-    dest: resolve('dist/vue.esm.browser.js'),
+    dest: resolve('dist/vue.esm.browser.mjs'),
     format: 'es',
     transpile: false,
     env: 'development',
@@ -112,7 +112,7 @@ const builds = {
   // Runtime+compiler ES modules build (for direct import in browser)
   'full-esm-browser-prod': {
     entry: resolve('web/entry-runtime-with-compiler-esm.ts'),
-    dest: resolve('dist/vue.esm.browser.min.js'),
+    dest: resolve('dist/vue.esm.browser.min.mjs'),
     format: 'es',
     transpile: false,
     env: 'production',
@@ -156,7 +156,7 @@ const builds = {
   // Web compiler (CommonJS).
   compiler: {
     entry: resolve('web/entry-compiler.ts'),
-    dest: resolve('packages/template-compiler/build.js'),
+    dest: resolve('packages/template-compiler/build.cjs'),
     format: 'cjs',
     external: Object.keys(
       require('../packages/template-compiler/package.json').dependencies
@@ -167,7 +167,7 @@ const builds = {
     dest: resolve('packages/template-compiler/build.mjs'),
     format: 'esm',
     external: Object.keys(
-        require('../packages/template-compiler/package.json').dependencies
+      require('../packages/template-compiler/package.json').dependencies
     )
   },
   // Web compiler (UMD for in-browser use).
@@ -182,7 +182,7 @@ const builds = {
   // Web server renderer (CommonJS).
   'server-renderer-dev': {
     entry: resolve('packages/server-renderer/src/index.ts'),
-    dest: resolve('packages/server-renderer/build.dev.js'),
+    dest: resolve('packages/server-renderer/build.dev.cjs'),
     format: 'cjs',
     env: 'development',
     external: [
@@ -194,7 +194,7 @@ const builds = {
   },
   'server-renderer-prod': {
     entry: resolve('server/index.ts'),
-    dest: resolve('packages/server-renderer/build.prod.js'),
+    dest: resolve('packages/server-renderer/build.prod.cjs'),
     format: 'cjs',
     env: 'production',
     external: [
@@ -214,7 +214,7 @@ const builds = {
   },
   'server-renderer-webpack-server-plugin': {
     entry: resolve('server/webpack-plugin/server.ts'),
-    dest: resolve('packages/server-renderer/server-plugin.js'),
+    dest: resolve('packages/server-renderer/server-plugin.cjs'),
     format: 'cjs',
     external: Object.keys(
       require('../packages/server-renderer/package.json').dependencies
@@ -222,7 +222,7 @@ const builds = {
   },
   'server-renderer-webpack-client-plugin': {
     entry: resolve('server/webpack-plugin/client.ts'),
-    dest: resolve('packages/server-renderer/client-plugin.js'),
+    dest: resolve('packages/server-renderer/client-plugin.cjs'),
     format: 'cjs',
     external: Object.keys(
       require('../packages/server-renderer/package.json').dependencies
@@ -230,7 +230,7 @@ const builds = {
   },
   'compiler-sfc': {
     entry: resolve('packages/compiler-sfc/src/index.ts'),
-    dest: resolve('packages/compiler-sfc/dist/compiler-sfc.js'),
+    dest: resolve('packages/compiler-sfc/dist/compiler-sfc.cjs'),
     format: 'cjs',
     external: Object.keys(
       require('../packages/compiler-sfc/package.json').dependencies
@@ -256,7 +256,7 @@ const builds = {
     dest: resolve('packages/compiler-sfc/dist/compiler-sfc.mjs'),
     format: 'esm',
     external: Object.keys(
-        require('../packages/compiler-sfc/package.json').dependencies
+      require('../packages/compiler-sfc/package.json').dependencies
     ),
     plugins: [
       node({ preferBuiltins: true }),
