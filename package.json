@@ -29,7 +29,7 @@
     },
     "./compiler-sfc": {
       "import": "./compiler-sfc/index.mjs",
-      "require": "./compiler-sfc/index.cjs"
+      "require": "./compiler-sfc/index.js"
     },
     "./dist/*": "./dist/*",
     "./types/*": "./types/*",
